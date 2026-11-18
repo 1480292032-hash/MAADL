@@ -40,14 +40,14 @@
 
 ### 游戏包名配置（首次使用）
 
-启动游戏任务需要知道游戏的包名。模拟器开启 ADB 后执行：
+当前已适配 **B服（bilibili 渠道）**，包名 `com.heitao.yhdzz.bilibili`，开箱即用。
+
+使用官服或其他渠道包时，先用 ADB 查包名并替换 `assets/resource/pipeline/startup.json` 中 `"游戏启动"` 节点的 `"package"` 字段：
 
 ```bash
-adb connect 127.0.0.1:5555
-adb shell pm list packages | findstr /i "date"
+adb connect 127.0.0.1:5555   # 端口按模拟器实际修改
+adb shell pm list packages -3
 ```
-
-把输出的包名填入 `assets/resource/pipeline/startup.json` 中 `"游戏启动"` 节点的 `"package"` 字段即可。
 
 ## 🛠️ 参与开发
 

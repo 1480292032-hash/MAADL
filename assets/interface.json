@@ -22,10 +22,13 @@
     ],
     "resource": [
         {
-            "name": "官服",
+            "name": "B服",
+            "label": "B服（bilibili 渠道）",
             "path": [
                 "./resource"
             ]
+            // 官服资源适配后再放开：
+            // {"name": "官服", "path": ["./resource_official"]}
         }
     ],
     "task": [
@@ -33,7 +36,7 @@
             "name": "启动游戏",
             "entry": "游戏启动",
             "default_check": true,
-            "description": "启动游戏并关闭登录弹窗，确认进入主界面。\n首次使用前需要先配置游戏包名（见 README）。"
+            "description": "启动游戏并关闭登录弹窗，确认进入主界面。"
         },
         {
             "name": "清日常",

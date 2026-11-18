@@ -3,17 +3,15 @@
     // 启动游戏：StartApp → 关闭登录/公告弹窗 → 确认主界面
     // ============================================
     //
-    // ⚠️ 首次使用前必须配置 package！
-    // 查询方法（模拟器 ADB 已连接时）：
-    //   adb shell pm list packages | findstr /i "date"
-    // 或者用 mt 管理器等工具查看游戏包名。
-    // 填写格式：com.xxx.xxx（只填包名）或 com.xxx.xxx/com.xxx.MainActivity（包名/入口 Activity）
+    // 包名查询方法（模拟器 ADB 已连接时）：
+    //   adb shell pm list packages -3
+    // B服：com.heitao.yhdzz.bilibili（黑桃《约战：精灵再临》，Unity）
+    // 官服/其他渠道请自行查询后替换，并同步调整 interface.json 的资源标注
 
     "游戏启动": {
         "recognition": "DirectHit",
         "action": "StartApp",
-        // TODO: 改成《约战：精灵再临》怀旧版的实际包名
-        "package": "com.todo.change_me",
+        "package": "com.heitao.yhdzz.bilibili",
         // 等游戏冷启动加载（Unity 游戏较慢，可按实际情况加大）
         "post_delay": 20000,
         "next": [

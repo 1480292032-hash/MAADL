@@ -1,39 +1,23 @@
 {
-    // 本文件主要定义了通用 UI 的行为和显示内容
-    // 可参考文档和示例添加更多您需要的功能
+    // MAADL 项目接口定义（ProjectInterface V2 协议）
     // 文档：https://maafw.xyz/docs/3.3-ProjectInterfaceV2
-    // 示例：https://github.com/MaaXYZ/MaaFramework/blob/main/sample/interface.json
     "interface_version": 2,
-    "name": "MaaXXX",
-    "description": "这是一个使用 MaaFramework 创建的新项目。",
-    "contact": "QQ群: 123456789",
+    "name": "MAADL",
+    "version": "0.1.0",
+    "description": "《约战：精灵再临》怀旧版 日常与推图助手，基于 MaaFramework 图像识别框架。",
+    "contact": "GitHub Issues | 游戏怀旧版官群 611900916",
     "license": "MIT",
-    "welcome": "首次使用！欢迎使用 MAA!",
-    // 填写项目地址和版本号可实现自动更新功能
-    "github": "https://github.com/MaaXYZ/MaaPracticeBoilerplate",
-    "version": "1.0.0",
-    // Mirror酱为第三方分发服务，新项目默认关闭
-    // 若有需要请联系 Mirror酱 开通，直接自行开启是无法使用的
-    // "mirrorchyan_rid": "MaaXXX",
-    // "mirrorchyan_multiplatform": true,
+    "welcome": "欢迎使用 MAADL！\n\n使用前请确认：\n1. 模拟器分辨率已设置为 **1280x720（16:9）**\n2. 模拟器 ADB 调试已开启\n3. 游戏已登录并可进入主界面",
+    // 建仓后把 1480292032-hash 替换成实际用户名，用于版本更新检查
+    "github": "https://github.com/1480292032-hash/MAADL",
     "controller": [
         {
-            "name": "安卓端",
+            "name": "Adb",
+            "label": "安卓模拟器 / 设备",
             "type": "Adb",
-            "display_short_side": 720 // 默认缩放分辨率的短边长度
-        },
-        {
-            "name": "桌面端",
-            "type": "Win32",
-            "win32": {
-                "class_regex": ".*",
-                "window_regex": "Visual Studio",
-                // 截图及控制方式，请根据项目实际情况修改
-                // 文档: https://maafw.xyz/docs/2.4-ControlMethods
-                "screencap": "PrintWindow", // 截图方式
-                "mouse": "PostMessageWithCursorPos", // 鼠标控制方式
-                "keyboard": "PostMessageWithCursorPos" // 键盘控制方式
-            }
+            // 截图统一缩放到短边 720，与模板图制作规范一致
+            "display_short_side": 720,
+            "description": "支持雷电、UU、MuMu 等模拟器及安卓真机。\n\n**请将模拟器分辨率设为 1280x720（DPI 240）**。\n雷电模拟器默认端口 `5555`；UU 模拟器请在设置/问题诊断页查看 ADB 端口。"
         }
     ],
     "resource": [
@@ -42,64 +26,128 @@
             "path": [
                 "./resource"
             ]
-        },
-        {
-            "name": "B 服",
-            "path": [
-                "./resource"
-                // "./resource_bilibili"
-            ]
         }
     ],
-    // 可选的 agent 示例
-    // "agent": {
-    //     "child_exec": "python",
-    //     "child_args": [
-    //         "./agent/main.py"
-    //     ]
-    // },
     "task": [
         {
-            "name": "普通任务",
-            "entry": "MyTask1"
+            "name": "启动游戏",
+            "entry": "游戏启动",
+            "default_check": true,
+            "description": "启动游戏并关闭登录弹窗，确认进入主界面。\n首次使用前需要先配置游戏包名（见 README）。"
         },
         {
-            "name": "选项任务",
-            "entry": "MyTask2",
+            "name": "清日常",
+            "entry": "Daily",
             "option": [
-                "任务选项1"
-            ]
-        },
-        {
-            "name": "参数任务",
-            "entry": "MyTask3",
-            "option": [
-                "任务选项1"
+                "日常功能选择"
             ],
-            "pipeline_override": {}
+            "description": "清理每日任务。当前为骨架版本，各功能需补充截图后逐步启用。"
         },
         {
-            "name": "自定义识别与动作示例",
-            "entry": "FindSmallestNumber"
+            "name": "剧情关卡推图",
+            "entry": "StoryFarming",
+            "option": [
+                "推图次数上限",
+                "自动战斗开关"
+            ],
+            "description": "利用游戏内自动战斗推剧情关卡，打完自动进入下一关，体力不足自动停止。\n建议与「启动游戏」一起勾选，会先确认进入主界面。"
         }
     ],
     "option": {
-        "任务选项1": {
+        "推图次数上限": {
             "type": "select",
+            "label": "推图次数上限",
+            "description": "最多连续进入多少次战斗（按点击「开始战斗」的次数计算）。",
+            "default_case": "不限",
             "cases": [
                 {
-                    "name": "文本1",
+                    "name": "不限",
+                    "pipeline_override": {}
+                },
+                {
+                    "name": "10 次",
                     "pipeline_override": {
-                        "OcrTask": {
-                            "text": "文本1"
+                        "剧情_开始战斗": {
+                            "max_hit": 10
                         }
                     }
                 },
                 {
-                    "name": "文本2",
+                    "name": "20 次",
                     "pipeline_override": {
-                        "OcrTask": {
-                            "text": "文本2"
+                        "剧情_开始战斗": {
+                            "max_hit": 20
+                        }
+                    }
+                },
+                {
+                    "name": "50 次",
+                    "pipeline_override": {
+                        "剧情_开始战斗": {
+                            "max_hit": 50
+                        }
+                    }
+                }
+            ]
+        },
+        "自动战斗开关": {
+            "type": "switch",
+            "label": "进入战斗后点击「自动」",
+            "description": "进入战斗后自动点击游戏的自动战斗按钮。如果游戏会记住自动战斗开关状态，可以关闭此项。",
+            "default_case": "Yes",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "剧情_开启自动战斗": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "pipeline_override": {
+                        "剧情_开启自动战斗": {
+                            "enabled": false
+                        }
+                    }
+                }
+            ]
+        },
+        "日常功能选择": {
+            "type": "checkbox",
+            "label": "要执行的日常项目",
+            "description": "勾选需要执行的日常项目。未补齐截图的项目勾选了也不会生效。",
+            "cases": [
+                {
+                    "name": "签到",
+                    "pipeline_override": {
+                        "日常_签到": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "领取邮件",
+                    "pipeline_override": {
+                        "日常_领取邮件": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "领取在线奖励",
+                    "pipeline_override": {
+                        "日常_领取在线奖励": {
+                            "enabled": true
+                        }
+                    }
+                },
+                {
+                    "name": "每日副本",
+                    "pipeline_override": {
+                        "日常_每日副本": {
+                            "enabled": true
                         }
                     }
                 }

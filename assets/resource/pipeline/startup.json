@@ -1,0 +1,75 @@
+{
+    // ============================================
+    // 启动游戏：StartApp → 关闭登录/公告弹窗 → 确认主界面
+    // ============================================
+    //
+    // ⚠️ 首次使用前必须配置 package！
+    // 查询方法（模拟器 ADB 已连接时）：
+    //   adb shell pm list packages | findstr /i "date"
+    // 或者用 mt 管理器等工具查看游戏包名。
+    // 填写格式：com.xxx.xxx（只填包名）或 com.xxx.xxx/com.xxx.MainActivity（包名/入口 Activity）
+
+    "游戏启动": {
+        "recognition": "DirectHit",
+        "action": "StartApp",
+        // TODO: 改成《约战：精灵再临》怀旧版的实际包名
+        "package": "com.todo.change_me",
+        // 等游戏冷启动加载（Unity 游戏较慢，可按实际情况加大）
+        "post_delay": 20000,
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "主界面_特征确认"
+        ],
+        "timeout": 120000,
+        "on_error": [
+            "启动_失败兜底"
+        ],
+        "focus": {
+            "Node.Action.Starting": "正在启动游戏……"
+        }
+    },
+
+    // 主界面特征：识别到即认为游戏已就绪，本任务结束
+    // TODO: 建议后续换成主界面独有按钮（如「任务」「商城」等）的模板图，更稳更快
+    "主界面_特征确认": {
+        "recognition": "OCR",
+        // TODO: 按《约战：精灵再临》主界面实际存在的按钮文字调整
+        "expected": [
+            "任务",
+            "商城",
+            "设置"
+        ],
+        "roi": [
+            0,
+            0,
+            1280,
+            720
+        ],
+        "post_delay": 1000,
+        "next": [],
+        "focus": {
+            "Node.Recognition.Succeeded": {
+                "content": "已确认进入游戏主界面",
+                "display": [
+                    "log",
+                    "toast"
+                ]
+            }
+        }
+    },
+
+    // 启动超时 / StartApp 失败的兜底提示
+    "启动_失败兜底": {
+        "recognition": "DirectHit",
+        "action": "StopTask",
+        "focus": {
+            "Node.Action.Starting": {
+                "content": "启动失败或 120 秒内未识别到主界面：\n1. 检查 startup.json 中 package 是否已配置为游戏实际包名\n2. 确认模拟器画面正常、游戏可手动进入\n3. 查看 debug/maafw.log 与失败时自动保存的截图",
+                "display": [
+                    "log",
+                    "modal"
+                ]
+            }
+        }
+    }
+}

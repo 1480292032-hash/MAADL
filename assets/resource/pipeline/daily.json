@@ -1,0 +1,130 @@
+{
+    // ============================================
+    // 清日常：骨架版本
+    // ============================================
+    //
+    // 结构与推图相同（平铺循环）：扫描下面的日常节点列表，
+    // 有匹配就执行，全部不再匹配 → 超时 → 视为日常完成并结束。
+    //
+    // 当前所有日常节点默认 enabled: false（在下方节点里标注），
+    // 通过 interface.json 的「日常功能选择」勾选启用。
+    // ⚠️ 未补充截图素材前，勾选了也不会有正确效果！
+    //
+    // TODO（补齐日常功能的步骤）：
+    //   1. 用 MaaDebugger 截取各日常功能的界面；
+    //   2. 裁剪入口按钮 / 领取按钮的小图，放到 assets/resource/image/daily/ 下；
+    //   3. 修改对应节点：换成 TemplateMatch + 准确 roi，并写好完整流程
+    //      （进入 → 领取 → 返回）；
+    //   4. 实机调试通过后即可发布。
+
+    "Daily": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_签到",
+            "[JumpBack]日常_领取邮件",
+            "[JumpBack]日常_领取在线奖励",
+            "[JumpBack]日常_每日副本"
+        ],
+        // 连续 30 秒没有任何日常节点可执行 → 结束
+        "timeout": 30000,
+        "on_error": [
+            "日常_结束"
+        ],
+        "focus": {
+            "Node.Action.Starting": "开始清理日常……"
+        }
+    },
+
+    // TODO: 完整实现 = 进入签到页 → 领取 → 返回主界面
+    "日常_签到": {
+        "enabled": false,
+        "recognition": "OCR",
+        "expected": [
+            "签到"
+        ],
+        "roi": [
+            0,
+            0,
+            1280,
+            720
+        ],
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // TODO: 完整实现 = 打开邮件 → 全部领取 → 关闭
+    "日常_领取邮件": {
+        "enabled": false,
+        "recognition": "OCR",
+        "expected": [
+            "邮件",
+            "邮箱"
+        ],
+        "roi": [
+            0,
+            0,
+            1280,
+            720
+        ],
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // TODO: 完整实现 = 打开在线奖励面板 → 逐个领取 → 关闭
+    "日常_领取在线奖励": {
+        "enabled": false,
+        "recognition": "OCR",
+        "expected": [
+            "在线奖励",
+            "累计在线"
+        ],
+        "roi": [
+            0,
+            0,
+            1280,
+            720
+        ],
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // TODO: 完整实现 = 进入每日副本 → 选择副本 → 开始 → 结算 → 返回
+    "日常_每日副本": {
+        "enabled": false,
+        "recognition": "OCR",
+        "expected": [
+            "每日副本",
+            "素材副本",
+            "经验副本"
+        ],
+        "roi": [
+            0,
+            0,
+            1280,
+            720
+        ],
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // 所有日常节点不再命中（或超时）时结束任务
+    "日常_结束": {
+        "recognition": "DirectHit",
+        "action": "StopTask",
+        "focus": {
+            "Node.Action.Starting": {
+                "content": "日常任务流程结束 ✅（若启用了项目但未完成，请查看日志排查）",
+                "display": [
+                    "log",
+                    "toast"
+                ]
+            }
+        }
+    }
+}

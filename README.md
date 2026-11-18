@@ -1,43 +1,137 @@
-<!-- markdownlint-disable MD033 MD041 -->
-<p align="center">
-  <img alt="LOGO" src="https://cdn.jsdelivr.net/gh/MaaAssistantArknights/design@main/v1/icons/maa-logo_512x512.png" width="256" height="256" />
-</p>
-
 <div align="center">
 
-# MaaPracticeBoilerplate
+# MAADL
+
+**《约战：精灵再临》怀旧版 日常与推图助手**
+
+基于 [MaaFramework](https://github.com/MaaXYZ/MaaFramework) 图像识别自动化框架 · 纯 JSON 流水线 · 开箱即用
 
 </div>
 
-本仓库为 [MaaFramework](https://github.com/MaaXYZ/MaaFramework) 所提供的项目模板，开发者可基于此模板直接创建自己的 MaaXXX 项目。
+---
 
-> **MaaFramework** 是基于图像识别技术、运用 [MAA](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 开发经验去芜存菁、完全重写的新一代自动化黑盒测试框架。
-> 低代码的同时仍拥有高扩展性，旨在打造一款丰富、领先、且实用的开源库，助力开发者轻松编写出更好的黑盒测试程序，并推广普及。
+## ✨ 功能
 
-## 即刻开始
+| 功能 | 状态 | 说明 |
+| ---- | ---- | ---- |
+| 启动游戏 | ✅ 可用 | 启动游戏、关闭登录/公告弹窗、确认进入主界面 |
+| 剧情关卡推图 | 🚧 开发中 | 自动战斗推剧情关卡，打完自动进下一关，体力不足自动停止 |
+| 清日常 | 🚧 骨架 | 签到 / 邮件 / 在线奖励 / 每日副本（逐步补充中） |
 
-**请不要直接克隆本仓库！你应该通过模板创建自己的项目！**  
+> 「🚧」表示流程框架已就绪，等待补充游戏界面识别素材，欢迎提 Issue / PR 一起完善！
 
-请阅读 [如何开发](./docs/zh_cn/develop/how_to_develop.md)。
+## 🖥️ 运行环境
 
-向本模板仓库提交改动前，请阅读 [PR 规范](./docs/zh_cn/develop/pull_request_guidelines.md)。
+- Windows 10/11（macOS / Linux 版本随 Release 一同提供，未经充分测试）
+- 安卓模拟器：雷电 / UU / MuMu 等均可，或安卓真机
+- **模拟器分辨率必须设置为 1280x720（16:9，DPI 240）**
+- 模拟器开启 ADB 调试
 
-## 生态共建
+## 📦 下载使用
 
-MAA 正计划建设为一类项目，而非舟的单一软件。
+1. 前往 [Releases](https://github.com/1480292032-hash/MAADL/releases) 页面，下载 `MAADL-win-x86_64` 压缩包
+2. 解压到任意**不含中文和空格**的目录（建议）
+3. 双击运行 `MFAAvalonia.exe`
+4. 控制器选择 **安卓模拟器 / 设备**：
+   - 雷电模拟器默认地址 `127.0.0.1:5555`
+   - UU 模拟器请在设置/问题诊断页查看 ADB 端口
+   - 也可点击「自动检测」让程序寻找已连接的模拟器
+5. 勾选任务（如「启动游戏」+「剧情关卡推图」），点击开始
 
-若您的项目依赖于 MaaFramework，我们欢迎您将它命名为 MaaXXX, MXA, MAX 等等。当然，这是许可而不是限制，您也可以自由选择其他与 MAA 无关的名字，完全取决于您自己的想法！
+### 游戏包名配置（首次使用）
 
-同时，我们也非常欢迎您提出 PR，在 [社区项目列表](https://github.com/MaaXYZ/MaaFramework#%E7%A4%BE%E5%8C%BA%E9%A1%B9%E7%9B%AE) 中添加上您的项目！
+启动游戏任务需要知道游戏的包名。模拟器开启 ADB 后执行：
 
-## 常见问题
+```bash
+adb connect 127.0.0.1:5555
+adb shell pm list packages | findstr /i "date"
+```
 
-请阅读 [常见问题](./docs/zh_cn/develop/faq.md)。
+把输出的包名填入 `assets/resource/pipeline/startup.json` 中 `"游戏启动"` 节点的 `"package"` 字段即可。
 
-## 鸣谢
+## 🛠️ 参与开发
+
+本项目使用官方模板 [MaaPracticeBoilerplate](https://github.com/MaaXYZ/MaaPracticeBoilerplate) 构建，欢迎 PR！
+
+### 环境准备
+
+```bash
+# 1. 安装 Python 3.9+ 与 VSCode 插件「Maa Pipeline Support」（nekosu.maa-support）
+# 2. 克隆项目（含子模块）
+git clone --recurse-submodules https://github.com/1480292032-hash/MAADL.git
+# 3. 配置本地 OCR 模型（从子模块复制，不上传）
+python tools/configure.py
+# 4. 安装调试工具
+pip install MaaFw MaaDebugger
+```
+
+### 调试
+
+用 VSCode 打开项目根目录（已自动关联 pipeline / interface 的 JSON Schema），使用 **Maa Pipeline Support** 插件：
+
+1. 连接模拟器（插件内填 ADB 地址）
+2. 截图 → 框选 ROI → 裁剪模板图，保存到 `assets/resource/image/` 对应子目录
+3. 单节点运行 / 断点调试流水线
+
+详细开发文档见 [docs/zh_cn/develop/how_to_develop.md](docs/zh_cn/develop/how_to_develop.md)。
+
+### 发布
+
+修改代码后提交，然后打 tag 触发自动打包发布：
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+GitHub Actions 会自动构建包含 MFAAvalonia 通用 GUI 的完整发布包。
+
+## 🧭 目录结构
+
+```
+MAADL/
+├── assets/
+│   ├── interface.json            # 项目接口定义（任务列表 / 选项 / 控制器）
+│   └── resource/
+│       ├── image/                # 模板识别图片（按界面分目录）
+│       ├── model/                # OCR 等模型（本地生成，不入库）
+│       └── pipeline/
+│           ├── common.json       # 通用节点（关弹窗 / 重连）
+│           ├── startup.json      # 启动游戏
+│           ├── story.json        # 剧情推图循环
+│           └── daily.json        # 清日常
+├── agent/                        # Python 自定义识别/动作（当前未启用）
+├── docs/                         # 开发文档
+└── .github/workflows/            # CI：打包 / 发布 / 校验
+```
+
+## ❓ 常见问题
+
+**连接模拟器失败 / 截图全黑？**
+确认模拟器 ADB 调试已开启、端口正确；雷电模拟器建议在设置中开启「ADB 调试」。分辨率必须是 1280x720。
+
+**识别不到界面 / 任务中途停止？**
+当前版本基于 OCR 文本识别，游戏界面文案更新可能导致识别失效。请携带 `debug/maafw.log` 和失败截图提 [Issue](https://github.com/1480292032-hash/MAADL/issues)。
+
+**推图中途点了奇怪的东西？**
+OCR 识别的误伤。欢迎反馈具体界面截图，我们会用模板图替换，提高准确率。
+
+## 📜 免责声明
+
+- 本项目为开源的学习交流项目，仅供个人学习、研究使用，请勿用于商业用途
+- 请合理控制使用时间，遵守游戏用户协议，因使用本程序导致的账号问题由使用者自行承担
+- 本项目不修改游戏数据、不注入游戏进程，仅通过图像识别模拟人工点击
+
+## 🙏 鸣谢
 
 本项目由 **[MaaFramework](https://github.com/MaaXYZ/MaaFramework)** 强力驱动！
 
-感谢以下开发者对本项目作出的贡献（下面链接改成你自己的项目地址）:
+通用 GUI：[MFAAvalonia](https://github.com/SweetSmellFox/MFAAvalonia)
 
-[![Contributors](https://contrib.rocks/image?repo=MaaXYZ/MaaFramework&max=1000)](https://github.com/MaaXYZ/MaaFramework/graphs/contributors)
+感谢以下开发者作出的贡献：
+
+[![Contributors](https://contrib.rocks/image?repo=1480292032-hash/MAADL&max=1000)](https://github.com/1480292032-hash/MAADL/graphs/contributors)
+
+## License
+
+[MIT](./LICENSE)

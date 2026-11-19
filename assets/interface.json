@@ -58,36 +58,22 @@
         "关卡选择": {
             "type": "input",
             "label": "目标关卡",
-            "description": "填写要刷的剧情关卡。章节号是「卷N」的 N，关卡号对应地图上的 N-M 标注。\n例如：章节 7、关卡 10 = 反复刷 7-10。",
+            "description": "填写要刷的关卡号，对应章节地图上节点的 N-M 标注中的 M。\n例如关卡 10 = 反复刷当前章节的 7-10。\n脚本会自动进入当前进度章节；要刷其他章节请先手动停在该章节地图。",
             "inputs": [
-                {
-                    "name": "章节号",
-                    "label": "章节（卷）号",
-                    "description": "要刷的章节，即「卷N」中的 N",
-                    "default": "1",
-                    "pipeline_type": "string",
-                    "verify": "^\\d+$",
-                    "pattern_msg": "章节号必须是数字，如 7"
-                },
                 {
                     "name": "关卡号",
                     "label": "关卡号",
-                    "description": "要刷的关卡，即地图节点 N-M 中的 M",
-                    "default": "5",
+                    "description": "地图节点 N-M 标注中的 M，如 10 表示 7-10",
+                    "default": "10",
                     "pipeline_type": "string",
                     "verify": "^\\d+$",
                     "pattern_msg": "关卡号必须是数字，如 10"
                 }
             ],
             "pipeline_override": {
-                "剧情_选章节": {
-                    "expected": [
-                        "卷{章节号}"
-                    ]
-                },
                 "剧情_选关卡节点": {
                     "expected": [
-                        "{章节号}-{关卡号}"
+                        "\\d+-{关卡号}"
                     ]
                 }
             }

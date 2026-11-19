@@ -40,9 +40,9 @@
 
 ### 游戏包名配置（首次使用）
 
-当前已适配 **B服（bilibili 渠道）**，包名 `com.heitao.yhdzz.bilibili`，开箱即用。
+当前适配的是**官服怀旧版**（[datealive.com/huaijiu](https://datealive.com/huaijiu)），包名 `com.datealive.huaijiu.hta`，开箱即用。
 
-使用官服或其他渠道包时，先用 ADB 查包名并替换 `assets/resource/pipeline/startup.json` 中 `"游戏启动"` 节点的 `"package"` 字段：
+使用其他渠道包（如正常版 B服 `com.heitao.yhdzz.bilibili`）时，界面不同，需自行适配；可先用 ADB 查包名并替换 `assets/resource/pipeline/startup.json` 中 `"游戏启动"` 节点的 `"package"` 字段：
 
 ```bash
 adb connect 127.0.0.1:5555   # 端口按模拟器实际修改

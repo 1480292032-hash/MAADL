@@ -22,13 +22,11 @@
     ],
     "resource": [
         {
-            "name": "B服",
-            "label": "B服（bilibili 渠道）",
+            "name": "官服",
+            "label": "官服怀旧版",
             "path": [
                 "./resource"
             ]
-            // 官服资源适配后再放开：
-            // {"name": "官服", "path": ["./resource_official"]}
         }
     ],
     "task": [
@@ -50,17 +48,54 @@
             "name": "剧情关卡推图",
             "entry": "StoryFarming",
             "option": [
-                "推图次数上限",
-                "自动战斗开关"
+                "关卡选择",
+                "推图次数上限"
             ],
-            "description": "利用游戏内自动战斗推剧情关卡，打完自动进入下一关，体力不足自动停止。\n建议与「启动游戏」一起勾选，会先确认进入主界面。"
+            "description": "自动进入指定剧情关卡循环战斗（利用游戏内自动战斗），体力不足自动停止。\n需填写章节号和关卡号，如章节 7、关卡 10 即反复刷 7-10。\n建议与「启动游戏」一起勾选，会先确认进入主界面。"
         }
     ],
     "option": {
+        "关卡选择": {
+            "type": "input",
+            "label": "目标关卡",
+            "description": "填写要刷的剧情关卡。章节号是「卷N」的 N，关卡号对应地图上的 N-M 标注。\n例如：章节 7、关卡 10 = 反复刷 7-10。",
+            "inputs": [
+                {
+                    "name": "章节号",
+                    "label": "章节（卷）号",
+                    "description": "要刷的章节，即「卷N」中的 N",
+                    "default": "1",
+                    "pipeline_type": "string",
+                    "verify": "^\\d+$",
+                    "pattern_msg": "章节号必须是数字，如 7"
+                },
+                {
+                    "name": "关卡号",
+                    "label": "关卡号",
+                    "description": "要刷的关卡，即地图节点 N-M 中的 M",
+                    "default": "5",
+                    "pipeline_type": "string",
+                    "verify": "^\\d+$",
+                    "pattern_msg": "关卡号必须是数字，如 10"
+                }
+            ],
+            "pipeline_override": {
+                "剧情_选章节": {
+                    "expected": [
+                        "卷{章节号}"
+                    ]
+                },
+                "剧情_选关卡节点": {
+                    "expected": [
+                        "{章节号}-{关卡号}"
+                    ]
+                }
+            }
+        },
         "推图次数上限": {
             "type": "select",
-            "label": "推图次数上限",
-            "description": "最多连续进入多少次战斗（按点击「开始战斗」的次数计算）。",
+            "label": "刷关次数上限",
+            "description": "最多连续出击多少次（每次消耗体力 18）。",
             "default_case": "不限",
             "cases": [
                 {
@@ -70,7 +105,7 @@
                 {
                     "name": "10 次",
                     "pipeline_override": {
-                        "剧情_开始战斗": {
+                        "剧情_出击": {
                             "max_hit": 10
                         }
                     }
@@ -78,7 +113,7 @@
                 {
                     "name": "20 次",
                     "pipeline_override": {
-                        "剧情_开始战斗": {
+                        "剧情_出击": {
                             "max_hit": 20
                         }
                     }
@@ -86,32 +121,8 @@
                 {
                     "name": "50 次",
                     "pipeline_override": {
-                        "剧情_开始战斗": {
+                        "剧情_出击": {
                             "max_hit": 50
-                        }
-                    }
-                }
-            ]
-        },
-        "自动战斗开关": {
-            "type": "switch",
-            "label": "进入战斗后点击「自动」",
-            "description": "进入战斗后自动点击游戏的自动战斗按钮。如果游戏会记住自动战斗开关状态，可以关闭此项。",
-            "default_case": "Yes",
-            "cases": [
-                {
-                    "name": "Yes",
-                    "pipeline_override": {
-                        "剧情_开启自动战斗": {
-                            "enabled": true
-                        }
-                    }
-                },
-                {
-                    "name": "No",
-                    "pipeline_override": {
-                        "剧情_开启自动战斗": {
-                            "enabled": false
                         }
                     }
                 }

@@ -39,10 +39,7 @@
         {
             "name": "清日常",
             "entry": "Daily",
-            "option": [
-                "日常功能选择"
-            ],
-            "description": "清理每日任务。当前为骨架版本，各功能需补充截图后逐步启用。"
+            "description": "自动领取每日奖励：签到、补给站（培养专区）、邮件一键领取。\n建议与「启动游戏」一起勾选。"
         },
         {
             "name": "剧情关卡推图",
@@ -109,45 +106,6 @@
                     "pipeline_override": {
                         "剧情_出击": {
                             "max_hit": 50
-                        }
-                    }
-                }
-            ]
-        },
-        "日常功能选择": {
-            "type": "checkbox",
-            "label": "要执行的日常项目",
-            "description": "勾选需要执行的日常项目。未补齐截图的项目勾选了也不会生效。",
-            "cases": [
-                {
-                    "name": "签到",
-                    "pipeline_override": {
-                        "日常_签到": {
-                            "enabled": true
-                        }
-                    }
-                },
-                {
-                    "name": "领取邮件",
-                    "pipeline_override": {
-                        "日常_领取邮件": {
-                            "enabled": true
-                        }
-                    }
-                },
-                {
-                    "name": "领取在线奖励",
-                    "pipeline_override": {
-                        "日常_领取在线奖励": {
-                            "enabled": true
-                        }
-                    }
-                },
-                {
-                    "name": "每日副本",
-                    "pipeline_override": {
-                        "日常_每日副本": {
-                            "enabled": true
                         }
                     }
                 }

@@ -47,6 +47,10 @@
             "[JumpBack]日常_特训返回",
             "[JumpBack]日常_特训挑战",
             "[JumpBack]日常_特训入口",
+            "[JumpBack]日常_竞技场返回",
+            "[JumpBack]竞技场_未开启提示",
+            "[JumpBack]竞技场_点匹配",
+            "[JumpBack]日常_竞技场入口",
             "[JumpBack]日常_研发中心返回",
             "[JumpBack]日常_任务领取奖励",
             "[JumpBack]日常_活跃礼包领取",
@@ -888,6 +892,104 @@
         "post_delay": 2000,
         "next": [
             "日常_主界面确认"
+        ]
+    },
+
+    // ============================================
+    // 竞技场（青铜战场）流程——当前未开放分支：
+    //   主界面「竞技场」建筑图标（点文字无效，点建筑本体）→ 点「匹配」
+    //   → 未开放时弹「关卡未开启」提示（约1~4秒自动消失，OCR 需在消失前命中）
+    //   → 命中后点返回位回主界面；活动开放后的进战分支后续再做
+    //   当前各节点 max_hit 1 保证只尝试一次，失败由循环超时/家园兜底安全回家
+    // ============================================
+
+    // 竞技场入口：主界面右下建筑图标（约 1210,530），红点已涂绿
+    "日常_竞技场入口": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_daily_arena.png",
+        "green_mask": true,
+        "roi": [
+            1100,
+            490,
+            180,
+            140
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            1210,
+            530
+        ],
+        "post_delay": 5000,
+        "next": []
+    },
+
+    // 竞技场界面 → 「匹配」按钮（蓝底），按钮上的次数标记已涂绿
+    "竞技场_点匹配": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_daily_arena_match.png",
+        "green_mask": true,
+        "roi": [
+            1050,
+            640,
+            230,
+            88
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            1178,
+            710
+        ],
+        "post_delay": 1000,
+        "next": []
+    },
+
+    // 「关卡未开启，您还无法进入」提示：命中后点返回位（关提示+返回双保险）
+    "竞技场_未开启提示": {
+        "max_hit": 1,
+        "recognition": "OCR",
+        "expected": [
+            "关卡未开启"
+        ],
+        "roi": [
+            300,
+            310,
+            700,
+            140
+        ],
+        "action": "Click",
+        "target": [
+            55,
+            35
+        ],
+        "post_delay": 2000,
+        "next": [
+            "日常_竞技场返回"
+        ]
+    },
+
+    // 竞技场界面 → 返回按钮回主界面
+    "日常_竞技场返回": {
+        "max_hit": 3,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_daily_back.png",
+        "roi": [
+            0,
+            0,
+            1280,
+            720
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "post_delay": 2000,
+        "next": [
+            "日常_主界面确认"
+        ],
+        "on_error": [
+            "日常_竞技场返回"
         ]
     },
 

@@ -1,0 +1,410 @@
+{
+    // ============================================
+    // 冬雪乐园·奇妙车（惊喜翻牌）
+    // ============================================
+    //
+    // 架构：JSON 负责入口导航与邮箱循环，翻牌全循环由 Python Agent 接管
+    //   （agent/park.py 的自定义动作「乐园翻牌循环」——识别、点牌、漩涡、
+    //    选奖励、钥匙计数全在 agent 内完成，钥匙耗尽后返回交给本文件
+    //    的邮箱溢出领取链，领完 JumpBack 回来继续，直到邮箱无附件）
+    //
+    // 实机校准（雷电9 1280x720，2026-11-20）：
+    //   主界面「冬雪乐园」(1060,560) → 乐园场景 → 右上「乐园手册」小地图 (1145,145)
+    //   → 手册地图点「奇妙车」车图标 (795,345)（点文字无效，角色自动走位）
+    //   → 点底部「进入」(1015,600) → 惊喜翻牌界面
+    // 翻牌：新层先设置奖励（+图标→选择奖励弹窗→点槽位自动确认）
+    //   →「开始翻牌」(1175,690) → 点牌（1钥匙/张）→ 奖池 1/1→0/1
+    //   → 20张全翻 → 紫色漩涡 → 点漩涡 → 确认弹窗 (455,497) → 下一层
+    // 钥匙不足 → 层锁死 → agent 退出循环 → 邮箱「溢出邮件」领附件补给 → 循环
+
+    "乐园翻牌": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "park_farm_loop",
+        "custom_action_param": {},
+        "next": [
+            "[JumpBack]乐园_退出到主界面",
+            "[JumpBack]乐园_邮箱溢出领取",
+            "乐园_完成"
+        ],
+        "on_error": [
+            "乐园_失败兜底"
+        ],
+        "focus": {
+            "Node.Action.Starting": "进入冬雪乐园翻牌循环……"
+        }
+    },
+
+    // ============ 导航节点（agent 内部用 run_action 复用） ============
+
+    // 主界面 → 冬雪乐园入口标签（约 1060,560），红点已涂绿
+    "乐园_主界面入口": {
+        "recognition": "TemplateMatch",
+        "template": "park/btn_park_entry.png",
+        "green_mask": true,
+        "roi": [
+            960,
+            500,
+            320,
+            130
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            1060,
+            560
+        ],
+        "post_delay": 8000,
+        "next": []
+    },
+
+    // 乐园场景 → 右上「乐园手册」小地图
+    "乐园_手册": {
+        "recognition": "TemplateMatch",
+        "template": "park/btn_park_manual.png",
+        "roi": [
+            1000,
+            40,
+            280,
+            200
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            1145,
+            145
+        ],
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // 手册地图 → 「奇妙车」车图标（点文字无效），红点已涂绿
+    "乐园_车图标": {
+        "recognition": "TemplateMatch",
+        "template": "park/btn_park_car.png",
+        "green_mask": true,
+        "roi": [
+            700,
+            215,
+            180,
+            180
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            795,
+            345
+        ],
+        "post_delay": 6000,
+        "next": []
+    },
+
+    // 奇妙车旁 → 底部「进入」按钮
+    "乐园_进入": {
+        "recognition": "OCR",
+        "expected": [
+            "进入"
+        ],
+        "roi": [
+            760,
+            540,
+            480,
+            120
+        ],
+        "action": "Click",
+        "target": [
+            1015,
+            600
+        ],
+        "post_delay": 5000,
+        "next": []
+    },
+
+    // ============ 识别节点（agent 循环内 run_recognition 复用） ============
+
+    // 翻牌界面标题特征
+    "乐园_界面标题": {
+        "recognition": "OCR",
+        "expected": [
+            "惊喜翻牌"
+        ],
+        "roi": [
+            200,
+            10,
+            240,
+            60
+        ]
+    },
+
+    // 顶部钥匙数量（右侧数字）
+    "乐园_钥匙数": {
+        "recognition": "OCR",
+        "expected": [
+            "\\d+"
+        ],
+        "roi": [
+            840,
+            15,
+            135,
+            55
+        ]
+    },
+
+    // 当前层数（设置区数字）
+    "乐园_层号": {
+        "recognition": "OCR",
+        "expected": [
+            "\\d+"
+        ],
+        "roi": [
+            930,
+            145,
+            180,
+            55
+        ]
+    },
+
+    // 未翻牌（沙漏背面），Random 排序随机点
+    "乐园_未翻牌": {
+        "recognition": "TemplateMatch",
+        "template": "park/card_unflipped.png",
+        "roi": [
+            40,
+            140,
+            760,
+            540
+        ],
+        "order_by": "Random",
+        "threshold": 0.7
+    },
+
+    // 层完成后的紫色漩涡（刷新进下一层）
+    "乐园_漩涡": {
+        "recognition": "TemplateMatch",
+        "template": "park/card_vortex.png",
+        "roi": [
+            40,
+            140,
+            760,
+            540
+        ],
+        "threshold": 0.7
+    },
+
+    // 「开始翻牌」按钮（粉色=已设置奖励可点；灰色=未设置）
+    "乐园_开始翻牌": {
+        "recognition": "TemplateMatch",
+        "template": "park/btn_park_start.png",
+        "roi": [
+            1050,
+            630,
+            230,
+            90
+        ],
+        "threshold": 0.7
+    },
+
+    // 设置通关奖励图标：加号（未设置）与奖励图（已设置）
+    "乐园_设置加号": {
+        "recognition": "TemplateMatch",
+        "template": "park/icon_park_plus.png",
+        "roi": [
+            720,
+            130,
+            130,
+            130
+        ],
+        "threshold": 0.7
+    },
+    "乐园_设置奖励态": {
+        "recognition": "TemplateMatch",
+        "template": "park/icon_park_reward.png",
+        "roi": [
+            720,
+            130,
+            130,
+            130
+        ],
+        "threshold": 0.7
+    },
+
+    // 「选择奖励」弹窗标题
+    "乐园_选择奖励弹窗": {
+        "recognition": "OCR",
+        "expected": [
+            "选择奖励"
+        ],
+        "roi": [
+            235,
+            145,
+            420,
+            70
+        ]
+    },
+
+    // 家园图标（右上角，兜底回主界面用）
+    // 注：「乐园_退出确认弹窗」节点定义在下方邮箱补给链处（含确认按钮点击动作）
+    "乐园_家园图标": {
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_daily_home.png",
+        "roi": [
+            1140,
+            0,
+            140,
+            80
+        ],
+        "threshold": 0.7
+    },
+
+    // 「选择奖励」弹窗内的层数数字（与翻牌界面层号位置不同）
+    "乐园_弹窗层号": {
+        "recognition": "OCR",
+        "expected": [
+            "\\d+"
+        ],
+        "roi": [
+            575,
+            215,
+            180,
+            55
+        ]
+    },
+
+    // 翻牌界面右侧「剩余次数 N/1」（0 时为红色醒目提示）
+    "乐园_剩余次数": {
+        "recognition": "OCR",
+        "expected": [
+            "剩余次数"
+        ],
+        "roi": [
+            830,
+            210,
+            220,
+            60
+        ]
+    },
+
+    // ============ 钥匙耗尽后的邮箱补给循环 ============
+
+    // agent 返回（钥匙尽）后：点返回退出翻牌 → 确认弹窗 → 回主界面
+    "乐园_退出到主界面": {
+        "max_hit": 6,
+        "recognition": "DirectHit",
+        "action": "Click",
+        "target": [
+            55,
+            35
+        ],
+        "post_delay": 2000,
+        "next": [
+            "乐园_退出确认弹窗",
+            "日常_主界面确认"
+        ],
+        "on_error": [
+            "乐园_退出到主界面"
+        ]
+    },
+
+    // 「您确定返回主界面吗？」确认弹窗
+    "乐园_退出确认弹窗": {
+        "recognition": "OCR",
+        "expected": [
+            "返回主界面"
+        ],
+        "roi": [
+            310,
+            170,
+            660,
+            300
+        ],
+        "action": "Click",
+        "target": [
+            893,
+            518
+        ],
+        "post_delay": 3000,
+        "next": [
+            "日常_主界面确认"
+        ]
+    },
+
+    // 主界面 → 邮箱 → 「溢出邮件」领取（附件钥匙能存很多，分多次领取）
+    "乐园_邮箱溢出领取": {
+        "max_hit": 30,
+        "recognition": "OCR",
+        "expected": [
+            "溢出邮件"
+        ],
+        "roi": [
+            140,
+            180,
+            1000,
+            150
+        ],
+        "action": "Click",
+        "target": [
+            975,
+            269
+        ],
+        "post_delay": 2500,
+        "next": [
+            "乐园_邮箱获得物品确认"
+        ]
+    },
+
+    // 领取后「获得物品」弹窗：点返回位关闭（不在弹窗时点了就是退出邮箱回主界面）
+    "乐园_邮箱获得物品确认": {
+        "max_hit": 30,
+        "recognition": "OCR",
+        "expected": [
+            "获得物品"
+        ],
+        "roi": [
+            340,
+            140,
+            600,
+            420
+        ],
+        "action": "Click",
+        "target": [
+            55,
+            35
+        ],
+        "post_delay": 2000,
+        "next": []
+    },
+
+    // 全部结束：钥匙与溢出邮件都耗尽
+    "乐园_完成": {
+        "recognition": "DirectHit",
+        "action": "StopTask",
+        "focus": {
+            "Node.Action.Starting": {
+                "content": "冬雪乐园翻牌完成 ✅（钥匙与溢出邮件已耗尽）",
+                "display": [
+                    "log",
+                    "toast"
+                ]
+            }
+        }
+    },
+
+    // 异常兜底：点家园图标回主界面后结束
+    "乐园_失败兜底": {
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_daily_home.png",
+        "roi": [
+            1140,
+            0,
+            140,
+            80
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "post_delay": 2000,
+        "next": [
+            "日常_主界面确认",
+            "乐园_完成"
+        ]
+    }
+}

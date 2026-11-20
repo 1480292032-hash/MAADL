@@ -86,7 +86,7 @@
     "日常_签到": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_gift.png",
+        "template": "daily/btn_daily_gift.png",
         "green_mask": true,
         "roi": [
             0,
@@ -105,7 +105,7 @@
     "日常_签到按钮": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_sign.png",
+        "template": "daily/btn_daily_sign.png",
         "roi": [
             0,
             0,
@@ -124,7 +124,7 @@
     "日常_签到返回": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -150,7 +150,7 @@
     "日常_补给站入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_supply.png",
+        "template": "daily/btn_daily_supply.png",
         "green_mask": true,
         "roi": [
             280,
@@ -168,7 +168,7 @@
     "日常_补给站培养专区": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_cultivate.png",
+        "template": "daily/btn_daily_cultivate.png",
         "green_mask": true,
         "roi": [
             0,
@@ -186,7 +186,7 @@
     "日常_补给站领取": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_claim.png",
+        "template": "daily/btn_daily_claim.png",
         "roi": [
             0,
             0,
@@ -203,7 +203,7 @@
     "日常_补给站返回": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -229,7 +229,7 @@
     "日常_邮件入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_mail.png",
+        "template": "daily/btn_daily_mail.png",
         "green_mask": true,
         "roi": [
             820,
@@ -247,7 +247,7 @@
     "日常_邮件一键领取": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_mail_claim.png",
+        "template": "daily/btn_daily_mail_claim.png",
         "roi": [
             0,
             0,
@@ -264,7 +264,7 @@
     "日常_邮件返回": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -292,7 +292,7 @@
     "日常_联络入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_friend.png",
+        "template": "daily/btn_daily_friend.png",
         "green_mask": true,
         "roi": [
             900,
@@ -310,7 +310,7 @@
     "日常_联络一键赠送": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_friend_gift.png",
+        "template": "daily/btn_daily_friend_gift.png",
         "roi": [
             0,
             0,
@@ -327,7 +327,7 @@
     "日常_联络一键领取": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_friend_claim.png",
+        "template": "daily/btn_daily_friend_claim.png",
         "roi": [
             0,
             0,
@@ -344,7 +344,7 @@
     "日常_联络返回": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -396,7 +396,7 @@
     "日常_社团入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_club.png",
+        "template": "daily/btn_daily_club.png",
         "green_mask": true,
         "roi": [
             700,
@@ -414,7 +414,7 @@
     "日常_社团空投补给": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_airdrop.png",
+        "template": "daily/btn_daily_airdrop.png",
         "green_mask": true,
         "roi": [
             0,
@@ -432,7 +432,7 @@
     "日常_社团申请补给": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_airdrop_apply.png",
+        "template": "daily/btn_daily_airdrop_apply.png",
         "roi": [
             0,
             0,
@@ -450,7 +450,7 @@
     "日常_社团钻石确认": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_diamond.png",
+        "template": "daily/btn_daily_diamond.png",
         "roi": [
             0,
             0,
@@ -472,7 +472,7 @@
     "日常_社团返回": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -502,7 +502,7 @@
     "日常_研发中心入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_lab.png",
+        "template": "daily/btn_daily_lab.png",
         "green_mask": true,
         "roi": [
             950,
@@ -521,7 +521,7 @@
     "日常_活跃礼包领取": {
         "max_hit": 4,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_active_box.png",
+        "template": "daily/btn_daily_active_box.png",
         "green_mask": true,
         "roi": [
             640,
@@ -539,7 +539,7 @@
     "日常_任务领取奖励": {
         "max_hit": 5,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_task_claim.png",
+        "template": "daily/btn_daily_task_claim.png",
         "roi": [
             450,
             230,
@@ -556,7 +556,7 @@
     "日常_研发中心返回": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -587,7 +587,7 @@
     "日常_入侵入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_invasion.png",
+        "template": "daily/btn_daily_invasion.png",
         "green_mask": true,
         "roi": [
             230,
@@ -606,7 +606,7 @@
     "日常_入侵前往准备": {
         "max_hit": 3,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_invasion_go.png",
+        "template": "daily/btn_daily_invasion_go.png",
         "roi": [
             900,
             550,
@@ -623,7 +623,7 @@
     "日常_入侵出击": {
         "max_hit": 3,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_invasion_atk.png",
+        "template": "daily/btn_daily_invasion_atk.png",
         "roi": [
             900,
             500,
@@ -641,7 +641,7 @@
     "日常_入侵返回": {
         "max_hit": 3,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -673,7 +673,7 @@
     "日常_追猎入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_hunt.png",
+        "template": "daily/btn_daily_hunt.png",
         "green_mask": true,
         "roi": [
             120,
@@ -709,7 +709,7 @@
     "日常_追猎出击": {
         "max_hit": 2,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_hunt_atk.png",
+        "template": "daily/btn_daily_hunt_atk.png",
         "roi": [
             900,
             500,
@@ -726,7 +726,7 @@
     "日常_追猎作战奖励": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_hunt_reward.png",
+        "template": "daily/btn_daily_hunt_reward.png",
         "green_mask": true,
         "roi": [
             20,
@@ -744,7 +744,7 @@
     "日常_奖励页签首通": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/tab_daily_first.png",
+        "template": "daily/tab_daily_first.png",
         "roi": [
             225,
             180,
@@ -759,7 +759,7 @@
     "日常_奖励页签击杀": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/tab_daily_kill.png",
+        "template": "daily/tab_daily_kill.png",
         "roi": [
             225,
             180,
@@ -774,7 +774,7 @@
     "日常_奖励页签伤害": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/tab_daily_damage.png",
+        "template": "daily/tab_daily_damage.png",
         "roi": [
             225,
             180,
@@ -810,7 +810,7 @@
     "日常_追猎返回": {
         "max_hit": 3,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_back.png",
+        "template": "daily/btn_daily_back.png",
         "roi": [
             0,
             0,
@@ -840,7 +840,7 @@
     "日常_特训入口": {
         "max_hit": 1,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_train.png",
+        "template": "daily/btn_daily_train.png",
         "green_mask": true,
         "roi": [
             0,
@@ -859,7 +859,7 @@
     "日常_特训挑战": {
         "max_hit": 3,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_train_go.png",
+        "template": "daily/btn_daily_train_go.png",
         "roi": [
             990,
             630,
@@ -876,7 +876,7 @@
     "日常_特训返回": {
         "max_hit": 3,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_home.png",
+        "template": "daily/btn_daily_home.png",
         "roi": [
             1140,
             0,
@@ -900,7 +900,7 @@
     "日常_回家兜底": {
         "max_hit": 3,
         "recognition": "TemplateMatch",
-        "template": "image/daily/btn_daily_home.png",
+        "template": "daily/btn_daily_home.png",
         "roi": [
             1140,
             0,

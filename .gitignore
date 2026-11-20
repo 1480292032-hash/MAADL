@@ -452,3 +452,5 @@ tools/ImageCropper/**/*.png
 
 config
 debug
+# 用户本地配置（网页配置生成）
+config/

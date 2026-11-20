@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAADL 配置中心</title>
+<style>
+  :root {
+    --bg: #12141d;
+    --card: #1c1f2e;
+    --line: #2c3047;
+    --text: #e8eaf2;
+    --sub: #9aa0b8;
+    --accent: #f0699b;
+    --accent2: #6c8dff;
+    --ok: #4fd08b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Microsoft YaHei", system-ui, sans-serif;
+    padding: 28px; max-width: 980px; margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h1 span { color: var(--accent); }
+  .sub { color: var(--sub); font-size: 13px; margin-bottom: 24px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 20px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 16px; margin-bottom: 12px; }
+  .card h2::before { content: "◆ "; color: var(--accent); }
+  .desc { color: var(--sub); font-size: 13px; line-height: 1.7; margin-bottom: 14px; }
+  .slot-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .slot-row .label { min-width: 190px; font-size: 14px; }
+  .slot-row .label small { display: block; color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .slot-opts { display: flex; gap: 8px; flex: 1; }
+  .slot-opt {
+    flex: 1; text-align: center; padding: 9px 0;
+    border: 1px solid var(--line); border-radius: 8px;
+    cursor: pointer; font-size: 14px; user-select: none;
+    transition: all .15s;
+  }
+  .slot-opt:hover { border-color: var(--accent2); }
+  .slot-opt.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: bold; }
+  .actions { display: flex; gap: 12px; align-items: center; }
+  button {
+    background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; padding: 10px 26px; font-size: 14px;
+    cursor: pointer; font-family: inherit;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--sub); }
+  #status { font-size: 13px; color: var(--ok); }
+  #log {
+    background: #0b0d14; border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; height: 260px; overflow: auto;
+    font-family: Consolas, monospace; font-size: 12px;
+    color: #a8b3d0; white-space: pre-wrap; word-break: break-all;
+  }
+  .note { font-size: 13px; color: var(--sub); line-height: 1.9; }
+  .note b { color: var(--text); }
+  .note code { background: var(--bg); padding: 2px 6px; border-radius: 4px; color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<h1>MAADL <span>配置中心</span></h1>
+<div class="sub">《约战：精灵再临》怀旧版助手 · 本地配置 · 无需联网</div>
+
+<div class="card">
+  <h2>冬雪乐园 · 奇妙车翻牌奖励</h2>
+  <div class="desc">
+    设置「惊喜翻牌」每层通关奖励的选择偏好。翻牌脚本会在每层开始时自动按这里的配置点选奖励。<br>
+    <b>普通档</b>：当前层数不是 10 的整数倍时使用；<b>大奖档</b>：当前层数是 10 的整数倍（10、20、30…）时使用。<br>
+    槽位对应游戏内「选择奖励」弹窗里从左到右的 5 个奖励位。
+  </div>
+  <div class="slot-row">
+    <div class="label">普通档（每 1~9 层）<small>绝大多数层数使用</small></div>
+    <div class="slot-opts" id="opts-normal"></div>
+  </div>
+  <div class="slot-row">
+    <div class="label">大奖档（每 10 层）<small>层数为 10、20、30… 时使用</small></div>
+    <div class="slot-opts" id="opts-boss"></div>
+  </div>
+  <div class="actions">
+    <button onclick="save()">保存配置</button>
+    <span id="status"></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>运行日志（debug/maafw.log）</h2>
+  <div class="actions" style="margin-bottom:10px">
+    <button class="ghost" onclick="loadLog()">刷新日志</button>
+    <span class="desc" style="margin:0">翻牌运行时可在 MFAAvalonia 界面启动任务，日志实时更新</span>
+  </div>
+  <div id="log">（暂无日志）</div>
+</div>
+
+<div class="card">
+  <h2>使用说明</h2>
+  <div class="note">
+    <b>冬雪乐园翻牌</b>：MFAAvalonia 中勾选「启动游戏 + 冬雪乐园翻牌」开始运行。流程：进入乐园 → 奇妙车 → 自动翻牌进层 → 钥匙耗尽自动领邮箱溢出补给 → 全部耗尽后停止。<br>
+    <b>奖励设置</b>：游戏内「选择奖励」弹窗的 5 个槽位从左到右编号，在本页选择每档要点选的槽位。改完记得点保存。<br>
+    <b>入口提醒</b>：乐园入口在主界面左下「冬雪乐园」，需活动期间开放；翻牌钥匙可通过游戏玩法获取，溢出部分会进入邮箱「溢出邮件」，脚本会自动领取。<br>
+    <b>本页地址</b>：<code>http://127.0.0.1:8512</code> · 配置文件：<code>config/park_config.json</code>
+  </div>
+</div>
+
+<script>
+let cfg = { normal_slot: 1, boss_slot: 1 };
+
+function renderOpts(id, key) {
+  const box = document.getElementById(id);
+  box.innerHTML = "";
+  for (let i = 1; i <= 5; i++) {
+    const d = document.createElement("div");
+    d.className = "slot-opt" + (cfg[key] === i ? " on" : "");
+    d.textContent = "第 " + i + " 个";
+    d.onclick = () => { cfg[key] = i; renderOpts(id, key); };
+    box.appendChild(d);
+  }
+}
+
+async function loadConfig() {
+  const r = await fetch("/api/config");
+  const data = await r.json();
+  cfg.normal_slot = data.normal_slot || 1;
+  cfg.boss_slot = data.boss_slot || 1;
+  renderOpts("opts-normal", "normal_slot");
+  renderOpts("opts-boss", "boss_slot");
+}
+
+async function save() {
+  const r = await fetch("/api/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ normal_slot: cfg.normal_slot, boss_slot: cfg.boss_slot })
+  });
+  const data = await r.json();
+  const st = document.getElementById("status");
+  st.textContent = data.ok ? "✓ 已保存，下次运行翻牌任务时生效" : "✗ 保存失败: " + (data.error || "");
+  st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
+  setTimeout(() => st.textContent = "", 4000);
+}
+
+async function loadLog() {
+  const r = await fetch("/api/log");
+  const data = await r.json();
+  document.getElementById("log").textContent = data.log || "(暂无日志)";
+}
+
+loadConfig();
+loadLog();
+setInterval(loadLog, 8000);
+</script>
+</body>
+</html>

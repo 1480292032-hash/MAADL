@@ -3,7 +3,7 @@
     // 文档：https://maafw.xyz/docs/3.3-ProjectInterfaceV2
     "interface_version": 2,
     "name": "MAADL",
-    "version": "0.1.0",
+    "version": "0.3.0",
     "description": "《约战：精灵再临》怀旧版 日常与推图助手，基于 MaaFramework 图像识别框架。",
     "contact": "GitHub Issues | 游戏怀旧版官群 611900916",
     "license": "MIT",
@@ -49,8 +49,20 @@
                 "推图次数上限"
             ],
             "description": "自动进入指定剧情关卡循环战斗（利用游戏内自动战斗），体力不足自动停止。\n需填写章节号和关卡号，如章节 7、关卡 10 即反复刷 7-10。\n建议与「启动游戏」一起勾选，会先确认进入主界面。"
+        },
+        {
+            "name": "冬雪乐园翻牌",
+            "entry": "乐园翻牌",
+            "description": "冬雪乐园·奇妙车惊喜翻牌：自动设置通关奖励（默认选第 1 个槽位，可在「启动网页配置.bat」的浏览器页面中修改）、翻牌进层、钥匙耗尽自动领邮箱溢出补给，全部耗尽后停止。\n活动期间可用，建议与「启动游戏」一起勾选。"
         }
     ],
+    // Python Agent：为「冬雪乐园翻牌」等复杂流程提供自定义识别与动作
+    "agent": {
+        "child_exec": "python",
+        "child_args": [
+            "./agent/main.py"
+        ]
+    },
     "option": {
         "关卡选择": {
             "type": "input",

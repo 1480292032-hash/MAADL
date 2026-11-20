@@ -1,14 +1,19 @@
 import sys
 
 from maa.agent.agent_server import AgentServer
-from maa.toolkit import Toolkit
 
-import my_action
-import my_reco
+# import 副作用即完成自定义识别/动作注册（冬雪乐园翻牌等）
+import park
 
 
 def main():
-    Toolkit.init_option("./")
+    # AgentServer 上下文中 Toolkit 不可用，静默忽略
+    try:
+        from maa.toolkit import Toolkit
+
+        Toolkit.init_option("./")
+    except Exception:
+        pass
 
     if len(sys.argv) < 2:
         print("Usage: python main.py <socket_id>")

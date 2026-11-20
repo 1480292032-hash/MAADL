@@ -44,6 +44,9 @@
             "[JumpBack]日常_追猎出击",
             "[JumpBack]日常_追猎进入",
             "[JumpBack]日常_追猎入口",
+            "[JumpBack]日常_特训返回",
+            "[JumpBack]日常_特训挑战",
+            "[JumpBack]日常_特训入口",
             "[JumpBack]日常_研发中心返回",
             "[JumpBack]日常_任务领取奖励",
             "[JumpBack]日常_活跃礼包领取",
@@ -822,6 +825,69 @@
         ],
         "on_error": [
             "日常_追猎返回"
+        ]
+    },
+
+    // ============================================
+    // 特训矩阵（社团每日挑战）流程：
+    //   社团界面「特训矩阵」→「开始挑战」→ 直接进战斗（无编队页）
+    //   → 战斗UI与剧情相同（复用 战斗待机/结算 节点）
+    //   → 胜利结算两页后回特训界面，次数用完「开始挑战」变灰
+    //   → 点右上角家园图标回主界面
+    // ============================================
+
+    // 特训矩阵入口：社团界面左侧（约 85,465），红点已涂绿
+    "日常_特训入口": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "image/daily/btn_daily_train.png",
+        "green_mask": true,
+        "roi": [
+            0,
+            380,
+            200,
+            180
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // 特训界面 → 「开始挑战」粉红按钮（约 1095,680）
+    // max_hit 3 = 每日次数上限；次数用完按钮变灰不匹配，走特训返回
+    "日常_特训挑战": {
+        "max_hit": 3,
+        "recognition": "TemplateMatch",
+        "template": "image/daily/btn_daily_train_go.png",
+        "roi": [
+            990,
+            630,
+            220,
+            90
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "post_delay": 5000,
+        "next": []
+    },
+
+    // 特训打完 → 点右上角家园图标直接回主界面（实测 1213,33）
+    "日常_特训返回": {
+        "max_hit": 3,
+        "recognition": "TemplateMatch",
+        "template": "image/daily/btn_daily_home.png",
+        "roi": [
+            1140,
+            0,
+            140,
+            80
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "post_delay": 2000,
+        "next": [
+            "日常_主界面确认"
         ]
     },
 

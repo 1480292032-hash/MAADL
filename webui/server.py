@@ -17,6 +17,7 @@ PORT = 8512
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(ROOT, "config", "park_config.json")
 ARENA_CONFIG_PATH = os.path.join(ROOT, "config", "arena_config.json")
+DAILY_CONFIG_PATH = os.path.join(ROOT, "config", "daily_config.json")
 LOG_PATH = os.path.join(ROOT, "debug", "maafw.log")
 INDEX_PATH = os.path.join(ROOT, "webui", "index.html")
 
@@ -30,6 +31,29 @@ ARENA_DEFAULT = {
     "done_today": 0,
     "date": "",
 }
+
+DEFAULT_DAILY_ORDER = [
+    "签到", "补给站", "邮件", "联络", "社团", "次元入侵",
+    "追猎计划", "特训矩阵", "竞技场", "世界之眼", "魔女日程",
+]
+
+
+def read_daily_order():
+    try:
+        with open(DAILY_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        order = [s for s in data.get("order", []) if s in DEFAULT_DAILY_ORDER]
+        if order:
+            return order
+    except Exception:
+        pass
+    return list(DEFAULT_DAILY_ORDER)
+
+
+def write_daily_order(order):
+    os.makedirs(os.path.dirname(DAILY_CONFIG_PATH), exist_ok=True)
+    with open(DAILY_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump({"order": order}, f, ensure_ascii=False, indent=4)
 
 SLOT_OPTIONS = [
     (1, "第 1 个（最左）"),
@@ -116,6 +140,7 @@ class Handler(BaseHTTPRequestHandler):
             cfg = read_config()
             cfg["_slot_options"] = [name for _, name in SLOT_OPTIONS]
             cfg["arena"] = read_arena_config()
+            cfg["daily_order"] = read_daily_order()
             self._send(200, json.dumps(cfg, ensure_ascii=False))
         elif path == "/api/log":
             self._send(200, json.dumps({"log": tail_log()}, ensure_ascii=False))
@@ -131,10 +156,15 @@ class Handler(BaseHTTPRequestHandler):
                 write_config(body)
                 cfg = read_config()
                 cfg["arena"] = read_arena_config()
+                cfg["daily_order"] = read_daily_order()
                 self._send(200, json.dumps({"ok": True, "config": cfg}, ensure_ascii=False))
             elif path == "/api/arena":
                 cfg = write_arena_battles(body.get("battles_per_day", 5))
                 self._send(200, json.dumps({"ok": True, "arena": cfg}, ensure_ascii=False))
+            elif path == "/api/daily":
+                order = [s for s in body.get("order", []) if s in DEFAULT_DAILY_ORDER]
+                write_daily_order(order)
+                self._send(200, json.dumps({"ok": True, "order": read_daily_order()}, ensure_ascii=False))
             else:
                 self._send(404, "{}")
         except Exception as e:

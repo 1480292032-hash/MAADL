@@ -108,6 +108,7 @@
     // 模板图从 720p 全屏截图裁剪，红点已涂绿（green_mask 屏蔽，红点有无不影响匹配）
     // max_hit 1：整个任务只进一次签到页，防止"已签到后 进出循环"
     "日常_签到": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_gift.png",
@@ -172,6 +173,7 @@
 
     // 补给站入口：主界面顶部图标（约 370,45），红点已涂绿
     "日常_补给站入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_supply.png",
@@ -251,6 +253,7 @@
 
     // 邮件入口：主界面右侧邮件图标（约 895,220），红点已按位置涂绿
     "日常_邮件入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_mail.png",
@@ -314,6 +317,7 @@
 
     // 联络入口：主界面右侧联络图标（约 985,215），红点已按位置涂绿
     "日常_联络入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_friend.png",
@@ -418,6 +422,7 @@
 
     // 社团入口：主界面底部栏图标（约 790,685），红点已涂绿
     "日常_社团入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_club.png",
@@ -609,6 +614,7 @@
 
     // 次元入侵入口：社团界面左上（约 340,255），红点已涂绿
     "日常_入侵入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_invasion.png",
@@ -695,6 +701,7 @@
 
     // 追猎计划入口：社团界面左下（约 225,700），红点已涂绿
     "日常_追猎入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_hunt.png",
@@ -862,6 +869,7 @@
 
     // 特训矩阵入口：社团界面左侧（约 85,465），红点已涂绿
     "日常_特训入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_train.png",
@@ -924,6 +932,7 @@
 
     // 世界之眼入口：主界面右下蓝色眼睛按钮（约 1230,655）
     "世界之眼_入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_eye.png",
@@ -1060,6 +1069,7 @@
 
     // 魔女日程入口：主界面顶部图标（约 470,45）
     "日常_魔女日程入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_witch.png",
@@ -1522,6 +1532,7 @@
 
     // 竞技场入口：主界面右下建筑图标（约 1210,530），红点已涂绿
     "日常_竞技场入口": {
+        "timeout": 15000,
         "max_hit": 1,
         "recognition": "TemplateMatch",
         "template": "daily/btn_daily_arena.png",

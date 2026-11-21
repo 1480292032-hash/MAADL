@@ -95,6 +95,20 @@
 </div>
 
 <div class="card">
+  <h2>清日常 · 执行顺序</h2>
+  <div class="desc">
+    拖动按钮调整「清日常」任务的执行顺序（谁先谁后）。保存后下次运行生效。<br>
+    每项都会自动尝试：无内容可执行时自动跳过，不会卡住。
+  </div>
+  <div id="order-list"></div>
+  <div class="actions">
+    <button onclick="saveOrder()">保存顺序</button>
+    <button class="ghost" onclick="resetOrder()">恢复默认顺序</button>
+    <span id="order-status" style="font-size:13px;color:var(--ok)"></span>
+  </div>
+</div>
+
+<div class="card">
   <h2>竞技场 · 每日战斗场数</h2>
   <div class="desc">
     设置「青铜战场」每日自动匹配的场数。<b>填 0 = 不打竞技场</b>（任务会跳过）。<br>
@@ -157,6 +171,10 @@ async function loadConfig() {
     document.getElementById("arena-status").textContent =
       `今日已打 ${data.arena.done_today} 场（跨天自动重置）`;
   }
+  if (data.daily_order && data.daily_order.length) {
+    dailyOrder = data.daily_order;
+    renderOrder();
+  }
 }
 
 async function saveArena() {
@@ -197,6 +215,52 @@ async function loadLog() {
   const r = await fetch("/api/log");
   const data = await r.json();
   document.getElementById("log").textContent = data.log || "(暂无日志)";
+}
+
+let dailyOrder = [];
+
+function renderOrder() {
+  const box = document.getElementById("order-list");
+  box.innerHTML = "";
+  dailyOrder.forEach((name, i) => {
+    const row = document.createElement("div");
+    row.className = "slot-row";
+    row.style.justifyContent = "space-between";
+    row.innerHTML = `
+      <div class="label" style="min-width:auto">${i + 1}. ${name}</div>
+      <div class="slot-opts" style="flex:0 0 auto;gap:6px">
+        <button class="ghost" style="padding:6px 12px" onclick="moveOrder(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button>
+        <button class="ghost" style="padding:6px 12px" onclick="moveOrder(${i},1)" ${i === dailyOrder.length - 1 ? "disabled" : ""}>↓</button>
+      </div>`;
+    box.appendChild(row);
+  });
+}
+
+function moveOrder(i, delta) {
+  const j = i + delta;
+  [dailyOrder[i], dailyOrder[j]] = [dailyOrder[j], dailyOrder[i]];
+  renderOrder();
+}
+
+async function saveOrder() {
+  const r = await fetch("/api/daily", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order: dailyOrder })
+  });
+  const data = await r.json();
+  const st = document.getElementById("order-status");
+  st.textContent = data.ok ? "✓ 顺序已保存，下次清日常生效" : "✗ 保存失败";
+  st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
+  setTimeout(() => st.textContent = "", 4000);
+}
+
+async function resetOrder() {
+  await loadConfig();
+  const st = document.getElementById("order-status");
+  st.textContent = "✓ 已恢复默认顺序（记得点保存）";
+  st.style.color = "var(--accent2)";
+  setTimeout(() => st.textContent = "", 4000);
 }
 
 loadConfig();

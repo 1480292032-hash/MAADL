@@ -22,6 +22,7 @@ from maa.custom_recognition import CustomRecognition
 _PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CONFIG_PATH = os.path.join(_PROJECT_DIR, "config", "park_config.json")
 _ARENA_CONFIG_PATH = os.path.join(_PROJECT_DIR, "config", "arena_config.json")
+_DAILY_CONFIG_PATH = os.path.join(_PROJECT_DIR, "config", "daily_config.json")
 
 DEFAULT_CONFIG = {
     "normal_slot": 1,  # 每层（非10整数层）奖励：选第几个槽位（1~5）
@@ -638,3 +639,122 @@ class ArenaFight(CustomAction):
                 return True
             _log("导航：点击竞技场入口后未识别到竞技场界面")
         return False
+
+
+# ---------- 清日常调度（BAAH 式任务顺序配置） ----------
+
+# 子流程显示名 → pipeline 入口节点名
+DAILY_STEPS = {
+    "签到": "日常_签到",
+    "补给站": "日常_补给站入口",
+    "邮件": "日常_邮件入口",
+    "联络": "日常_联络入口",
+    "社团": "日常_社团入口",
+    "次元入侵": "日常_入侵入口",
+    "追猎计划": "日常_追猎入口",
+    "特训矩阵": "日常_特训入口",
+    "竞技场": "日常_竞技场入口",
+    "世界之眼": "世界之眼_入口",
+    "魔女日程": "日常_魔女日程入口",
+}
+
+DEFAULT_DAILY_ORDER = [
+    "签到", "补给站", "邮件", "联络", "社团", "次元入侵",
+    "追猎计划", "特训矩阵", "竞技场", "世界之眼", "魔女日程",
+]
+
+
+def load_daily_order():
+    """读取日常执行顺序，非法名剔除；配置缺失时用默认顺序"""
+    try:
+        with open(_DAILY_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        order = [s for s in data.get("order", []) if s in DAILY_STEPS]
+        if order:
+            return order
+    except Exception:
+        pass
+    return list(DEFAULT_DAILY_ORDER)
+
+
+@AgentServer.custom_action("日常调度循环")
+class DailyScheduler(CustomAction):
+    """按网页配置的顺序依次执行各日常子流程。
+
+    每个子流程是独立的 pipeline 任务（入口节点扫完无匹配即结束），
+    子流程之间确保回到主界面；游戏闪退时自动重启并恢复导航。
+    """
+
+    def run(self, context, argv) -> bool:
+        order = load_daily_order()
+        _log(f"今日日常顺序: {' → '.join(order)}")
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+
+        for step in order:
+            entry = DAILY_STEPS.get(step)
+            if entry is None:
+                continue
+
+            # 每步前确保回到主界面（含闪退恢复）
+            if not self._ensure_main(context, ctrl):
+                _log("无法回到主界面，调度中止")
+                return False
+
+            _log(f"执行日常：{step}")
+            try:
+                context.run_task(entry)
+                time.sleep(2.0)
+            except Exception as e:
+                _log(f"子流程 {step} 异常: {e}")
+
+        _log("全部日常子流程执行完毕")
+        return True
+
+    def _ensure_main(self, context, ctrl):
+        """确保回到主界面（最多 3 轮：游戏启动 + 返回位 + 家园兜底）"""
+
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        for attempt in range(3):
+            img = shot()
+            main_ui = _hit(context, img, "日常_主界面确认")
+            if main_ui is not None and main_ui.hit:
+                return True
+
+            # 游戏可能闪退：跑「游戏启动」拉起
+            try:
+                context.run_action("游戏启动")
+                time.sleep(3)
+            except Exception as e:
+                _log(f"游戏启动异常: {e}")
+
+            # 公告面板关闭
+            img = shot()
+            notice = _hit(context, img, "启动_公告面板关闭")
+            if notice is not None and notice.hit:
+                click(1128, 92, delay=2.0)
+                continue
+
+            # 连点返回位回主界面（先确认不在主界面防点头像）
+            for _ in range(4):
+                img = shot()
+                main_ui = _hit(context, img, "日常_主界面确认")
+                if main_ui is not None and main_ui.hit:
+                    return True
+                click(*BACK_POS)
+
+            # 家园图标兜底
+            home = _hit(context, shot(), "乐园_家园图标")
+            if home is not None and home.hit:
+                c = _box_center(home)
+                click(*c, delay=3.0)
+            else:
+                click(1213, 33, delay=3.0)
+
+        return _hit(context, shot(), "日常_主界面确认") is not None

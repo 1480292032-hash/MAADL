@@ -62,6 +62,16 @@
             "[JumpBack]日常_签到按钮",
             "[JumpBack]日常_签到",
             "[JumpBack]日常_每日副本",
+            "[JumpBack]日常_魔女日程返回",
+            "[JumpBack]魔女日程_周常领取",
+            "[JumpBack]魔女日程_切周常页签",
+            "[JumpBack]魔女日程_奖励一键领取",
+            "[JumpBack]魔女日程_弹窗一键领取",
+            "[JumpBack]魔女日程_获得物品关闭",
+            "[JumpBack]魔女日程_切奖励页签",
+            "[JumpBack]魔女日程_竖排一键领取",
+            "[JumpBack]魔女日程_切日常页签",
+            "[JumpBack]日常_魔女日程入口",
             "[JumpBack]世界之眼_返回主界面",
             "[JumpBack]世界之眼_探索掉落领取",
             "[JumpBack]世界之眼_获得物品关闭",
@@ -1028,6 +1038,202 @@
         ],
         "on_error": [
             "世界之眼_返回主界面"
+        ]
+    },
+
+    // ============================================
+    // 魔女日程（凭证/通行证）领取流程：
+    //   主界面顶部「魔女日程」图标 → 指令·任务界面（默认停在奖励页签）
+    //   → 奖励页签：底部「一键领取」→ 弹窗内「一键领取」→ 关获得物品
+    //   → 切「日常」页签：右上竖排「一键领取」→ 关获得物品
+    //   → 切「周常」页签：逐个点「领取」（横向滚动找更多）→ 关获得物品
+    //   → 左上返回 → 主界面确认
+    // 各领取动作后接通用节点「日常_领取成功确认」关获得物品弹窗
+    // ============================================
+
+    // 魔女日程入口：主界面顶部图标（约 470,45）
+    "日常_魔女日程入口": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_daily_witch.png",
+        "roi": [
+            420,
+            5,
+            120,
+            80
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            470,
+            45
+        ],
+        "post_delay": 4000,
+        "next": []
+    },
+
+    // 奖励页签 → 底部「一键领取」（粉横排按钮）
+    "魔女日程_奖励一键领取": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_witch_claim_h.png",
+        "roi": [
+            900,
+            640,
+            200,
+            100
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            995,
+            690
+        ],
+        "post_delay": 2500,
+        "next": []
+    },
+
+    // 「奖励领取」弹窗 → 内部「一键领取」按钮
+    "魔女日程_弹窗一键领取": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_witch_claim_popup.png",
+        "roi": [
+            230,
+            555,
+            170,
+            90
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            315,
+            598
+        ],
+        "post_delay": 2500,
+        "next": []
+    },
+
+    // 切「日常」页签（灰态模板，选中粉色态不匹配）
+    "魔女日程_切日常页签": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/tab_witch_daily.png",
+        "roi": [
+            30,
+            140,
+            70,
+            100
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            65,
+            155
+        ],
+        "post_delay": 2500,
+        "next": []
+    },
+
+    // 日常页签 → 右上竖排「一键领取」
+    "魔女日程_竖排一键领取": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_witch_claim_v.png",
+        "roi": [
+            1205,
+            95,
+            65,
+            120
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            1237,
+            150
+        ],
+        "post_delay": 2500,
+        "next": []
+    },
+
+    // 切「周常」页签（灰态模板）
+    "魔女日程_切周常页签": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/tab_witch_weekly.png",
+        "roi": [
+            30,
+            360,
+            70,
+            100
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            65,
+            395
+        ],
+        "post_delay": 2500,
+        "next": []
+    },
+
+    // 周常任务卡片 → 逐个点「领取」（横向列表，领取后重排由 OCR 重新定位）
+    "魔女日程_周常领取": {
+        "recognition": "OCR",
+        "expected": [
+            "领取"
+        ],
+        "roi": [
+            100,
+            520,
+            1180,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 2500,
+        "next": []
+    },
+
+    // 切「奖励」页签（灰态模板）
+    "魔女日程_切奖励页签": {
+        "max_hit": 1,
+        "recognition": "TemplateMatch",
+        "template": "daily/tab_witch_reward.png",
+        "roi": [
+            30,
+            265,
+            70,
+            100
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "target": [
+            65,
+            300
+        ],
+        "post_delay": 2500,
+        "next": []
+    },
+
+    // 指令·任务 → 左上返回回主界面
+    "日常_魔女日程返回": {
+        "max_hit": 3,
+        "recognition": "TemplateMatch",
+        "template": "daily/btn_daily_back.png",
+        "roi": [
+            0,
+            0,
+            1280,
+            720
+        ],
+        "threshold": 0.7,
+        "action": "Click",
+        "post_delay": 2000,
+        "next": [
+            "日常_主界面确认"
+        ],
+        "on_error": [
+            "日常_魔女日程返回"
         ]
     },
 

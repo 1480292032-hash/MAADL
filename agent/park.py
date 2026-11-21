@@ -539,17 +539,29 @@ class ArenaFight(CustomAction):
             click(*BACK_POS, delay=2.0)  # 保险：点返回位回竞技场界面
             return self._done_value(context, ctrl)
 
-        # 逐个点「领取」（最多 6 个），领完弹窗自动消失
+        # 逐个点「领取」（最多 6 个）：领取后列表会重排，每轮重新 OCR 定位
+        # 领取后轮询等待「获得物品」弹窗出现再关闭（固定 sleep 会错过时机导致漏领）
         claimed = 0
         for _ in range(6):
             img = shot()
+            if img is None:
+                time.sleep(2.0)
+                continue
             claim = _hit(context, img, "竞技场_领取按钮")
             if claim is None or not claim.hit:
                 break
             center = _box_center(claim)
-            click(*center, delay=3.0)
+            click(*center, delay=1.0)
             claimed += 1
-            # 关掉「获得物品」弹窗（点返回位，弹窗不在时点了会退出弹窗页）
+            # 轮询等待「获得物品」弹窗（最多 8 秒），出现后关掉
+            for _w in range(6):
+                time.sleep(1.3)
+                wimg = shot()
+                if wimg is None:
+                    continue
+                got = _hit(context, wimg, "乐园_获得物品弹窗")
+                if got is not None and got.hit:
+                    break
             click(*ARENA_POPUP_CLOSE, delay=2.0)
         _log(f"竞技场作战奖励领取 {claimed} 项")
 

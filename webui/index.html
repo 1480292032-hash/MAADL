@@ -95,6 +95,23 @@
 </div>
 
 <div class="card">
+  <h2>竞技场 · 每日战斗场数</h2>
+  <div class="desc">
+    设置「青铜战场」每日自动匹配的场数。<b>填 0 = 不打竞技场</b>（任务会跳过）。<br>
+    脚本每打完一场会把「今日已打」写入本地记录，闪退重启后从记录继续，绝不超打。
+  </div>
+  <div class="slot-row">
+    <div class="label">每日战斗场数<small id="arena-status">读取中…</small></div>
+    <div class="slot-opts">
+      <input id="arena-battles" type="number" min="0" max="99"
+        style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-family:inherit">
+      <button class="ghost" style="flex:0 0 auto" onclick="saveArena()">保存</button>
+    </div>
+  </div>
+  <div class="actions"><span id="arena-msg" style="font-size:13px;color:var(--ok)"></span></div>
+</div>
+
+<div class="card">
   <h2>运行日志（debug/maafw.log）</h2>
   <div class="actions" style="margin-bottom:10px">
     <button class="ghost" onclick="loadLog()">刷新日志</button>
@@ -135,6 +152,32 @@ async function loadConfig() {
   cfg.boss_slot = data.boss_slot || 1;
   renderOpts("opts-normal", "normal_slot");
   renderOpts("opts-boss", "boss_slot");
+  if (data.arena) {
+    document.getElementById("arena-battles").value = data.arena.battles_per_day;
+    document.getElementById("arena-status").textContent =
+      `今日已打 ${data.arena.done_today} 场（跨天自动重置）`;
+  }
+}
+
+async function saveArena() {
+  const v = parseInt(document.getElementById("arena-battles").value, 10);
+  if (isNaN(v) || v < 0 || v > 99) {
+    const st = document.getElementById("arena-msg");
+    st.textContent = "✗ 请输入 0~99 的数字";
+    st.style.color = "#ff6b6b";
+    return;
+  }
+  const r = await fetch("/api/arena", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ battles_per_day: v })
+  });
+  const data = await r.json();
+  const st = document.getElementById("arena-msg");
+  st.textContent = data.ok ? `✓ 已保存：每日 ${data.arena.battles_per_day} 场` : "✗ 保存失败";
+  st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
+  loadConfig();
+  setTimeout(() => st.textContent = "", 4000);
 }
 
 async function save() {

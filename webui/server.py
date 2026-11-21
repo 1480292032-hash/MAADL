@@ -16,12 +16,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT = 8512
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(ROOT, "config", "park_config.json")
+ARENA_CONFIG_PATH = os.path.join(ROOT, "config", "arena_config.json")
 LOG_PATH = os.path.join(ROOT, "debug", "maafw.log")
 INDEX_PATH = os.path.join(ROOT, "webui", "index.html")
 
 DEFAULT_CONFIG = {
     "normal_slot": 1,
     "boss_slot": 1,
+}
+
+ARENA_DEFAULT = {
+    "battles_per_day": 5,
+    "done_today": 0,
+    "date": "",
 }
 
 SLOT_OPTIONS = [
@@ -56,6 +63,30 @@ def write_config(cfg):
         json.dump(payload, f, ensure_ascii=False, indent=4)
 
 
+def read_arena_config():
+    cfg = dict(ARENA_DEFAULT)
+    try:
+        with open(ARENA_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for key in ARENA_DEFAULT:
+            if key in data:
+                cfg[key] = data[key]
+    except Exception:
+        pass
+    cfg["battles_per_day"] = max(0, min(99, int(cfg["battles_per_day"])))
+    cfg["done_today"] = max(0, int(cfg["done_today"]))
+    return cfg
+
+
+def write_arena_battles(battles_per_day):
+    cfg = read_arena_config()
+    cfg["battles_per_day"] = max(0, min(99, int(battles_per_day)))
+    os.makedirs(os.path.dirname(ARENA_CONFIG_PATH), exist_ok=True)
+    with open(ARENA_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=4)
+    return cfg
+
+
 def tail_log(lines=120):
     try:
         with open(LOG_PATH, "r", encoding="utf-8", errors="ignore") as f:
@@ -84,6 +115,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/config":
             cfg = read_config()
             cfg["_slot_options"] = [name for _, name in SLOT_OPTIONS]
+            cfg["arena"] = read_arena_config()
             self._send(200, json.dumps(cfg, ensure_ascii=False))
         elif path == "/api/log":
             self._send(200, json.dumps({"log": tail_log()}, ensure_ascii=False))
@@ -91,14 +123,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "{}")
 
     def do_POST(self):
-        if self.path != "/api/config":
-            self._send(404, "{}")
-            return
+        path = self.path.split("?")[0]
         try:
             length = int(self.headers.get("Content-Length", 0))
-            cfg = json.loads(self.rfile.read(length).decode("utf-8"))
-            write_config(cfg)
-            self._send(200, json.dumps({"ok": True, "config": read_config()}, ensure_ascii=False))
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            if path == "/api/config":
+                write_config(body)
+                cfg = read_config()
+                cfg["arena"] = read_arena_config()
+                self._send(200, json.dumps({"ok": True, "config": cfg}, ensure_ascii=False))
+            elif path == "/api/arena":
+                cfg = write_arena_battles(body.get("battles_per_day", 5))
+                self._send(200, json.dumps({"ok": True, "arena": cfg}, ensure_ascii=False))
+            else:
+                self._send(404, "{}")
         except Exception as e:
             self._send(400, json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
 

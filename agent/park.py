@@ -376,6 +376,84 @@ class ParkStateReco(CustomRecognition):
         return CustomRecognition.AnalyzeResult(box=box, detail={"layer": layer, "keys": keys, "unflipped": unflipped_count})
 
 
+# ---------- 剧情推图战斗循环（觉醒/出场技任务分支） ----------
+
+STORY_BATTLE_ROUNDS = 70   # 5s/轮 × 70 ≈ 6 分钟（300 秒限时 + 余量）
+STORY_AWAKEN_BTN = (1050, 367)  # 觉醒技能按钮（全角色同位置，游戏坐标）
+
+
+@AgentServer.custom_action("剧情战斗循环")
+class StoryFight(CustomAction):
+    """剧情推图战斗内循环（10 秒检测 + 按挑战目标分支技能操作）。
+
+    param.type:
+      awaken - 挑战目标含「觉醒技能」：识别金色发光觉醒按钮，每约 5 秒点击一次
+      switch - 挑战目标含「出场技」：右上角色头像检测 + 出场技点击 + 角色切换（待补细节）
+      none   - 无特殊技能目标：纯等待战斗结束
+    """
+
+    def run(self, context, argv) -> bool:
+        param = {}
+        try:
+            param = json.loads(argv.custom_action_param or "{}")
+        except Exception:
+            pass
+        task_type = param.get("type", "none")
+        _log(f"剧情战斗循环启动（type={task_type}）")
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+
+        battle_rounds = 0
+        while battle_rounds < STORY_BATTLE_ROUNDS:
+            battle_rounds += 1
+            img = _shot(ctrl)
+            if img is None:
+                time.sleep(2.0)
+                continue
+
+            # 玩家信息弹窗（误点助战头像）→ 取消
+            pi = _hit(context, img, "剧情_玩家信息取消")
+            if pi is not None and pi.hit:
+                _log("误触玩家信息弹窗，点取消")
+                _click(ctrl, 858, 538, 2.0)
+                continue
+
+            # 结算页 → 推进
+            end = _hit(context, img, "剧情_结算继续")
+            if end is not None and end.hit:
+                _log("战斗结束，推进结算")
+                _click(ctrl, 1150, 710, 4.0)
+                _click(ctrl, 1150, 710, 4.0)
+                break
+
+            # 战斗前对话 → 跳过
+            skip = _hit(context, img, "剧情_战斗前对话跳过")
+            if skip is not None and skip.hit:
+                c = _box_center(skip)
+                _click(ctrl, *c, 1.5)
+                continue
+
+            # 技能操作（按任务类型）
+            if task_type == "awaken":
+                aw = _hit(context, img, "战斗_觉醒技能")
+                if aw is not None and aw.hit:
+                    c = _box_center(aw)
+                    _log("点觉醒技能")
+                    _click(ctrl, *c, 5.0)  # 点完等 5 秒再识别
+                    continue
+            elif task_type == "switch":
+                pass  # 待用户确认出场技按钮位置后补
+
+            time.sleep(3)
+        else:
+            _log("剧情战斗超时（超过 6 分钟），异常结束")
+            return False
+
+        _log("剧情战斗结束")
+        return True
+
+
 # ---------- 竞技场（青铜战场） ----------
 
 ARENA_BATTLE_ROUNDS = 130  # 单把战斗内层轮次上限（10s/轮 ≈ 21 分钟），超出按异常处理

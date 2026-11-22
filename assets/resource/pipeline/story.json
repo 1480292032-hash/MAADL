@@ -30,6 +30,8 @@
             "[JumpBack]剧情_编入队伍",
             "[JumpBack]剧情_编队助战",
             "[JumpBack]剧情_出击",
+            "[JumpBack]剧情_觉醒判断",
+            "[JumpBack]剧情_出场判断",
             "[JumpBack]剧情_作战准备",
             "[JumpBack]剧情_选关卡节点",
             "[JumpBack]剧情_选章节",
@@ -126,6 +128,128 @@
         "action": "Click",
         "post_delay": 4000,
         "next": []
+    },
+
+    // 详情页挑战目标判断（路由到对应战斗循环分支）：
+    //   「觉醒技能」→ A 链（战斗内自动点觉醒）  「出场技」→ B 链（角色切换+出场技）
+    //   两判断都不命中（无特殊技能目标）→ 落到下方「剧情_作战准备」兜底（纯等待战斗）
+    "剧情_觉醒判断": {
+        "recognition": "OCR",
+        "expected": [
+            "觉醒技能"
+        ],
+        "roi": [
+            400,
+            380,
+            480,
+            155
+        ],
+        "next": [
+            "剧情_作战准备A"
+        ]
+    },
+    "剧情_出场判断": {
+        "recognition": "OCR",
+        "expected": [
+            "出场技"
+        ],
+        "roi": [
+            400,
+            380,
+            480,
+            155
+        ],
+        "next": [
+            "剧情_作战准备B"
+        ]
+    },
+
+    // ---- A 链：觉醒任务（战斗内自动点觉醒技能） ----
+    "剧情_作战准备A": {
+        "recognition": "OCR",
+        "expected": [
+            "作战准备"
+        ],
+        "roi": [
+            700,
+            520,
+            400,
+            100
+        ],
+        "action": "Click",
+        "post_delay": 4000,
+        "next": [
+            "剧情_出击A"
+        ]
+    },
+    "剧情_出击A": {
+        "recognition": "OCR",
+        "expected": [
+            "出击"
+        ],
+        "roi": [
+            1080,
+            650,
+            220,
+            80
+        ],
+        "action": "Click",
+        "post_delay": 8000,
+        "next": [
+            "剧情_战斗循环A"
+        ]
+    },
+    "剧情_战斗循环A": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "剧情战斗循环",
+        "custom_action_param": {
+            "type": "awaken"
+        }
+    },
+
+    // ---- B 链：出场技任务（角色切换 + 出场技，待用户确认按钮细节后补操作） ----
+    "剧情_作战准备B": {
+        "recognition": "OCR",
+        "expected": [
+            "作战准备"
+        ],
+        "roi": [
+            700,
+            520,
+            400,
+            100
+        ],
+        "action": "Click",
+        "post_delay": 4000,
+        "next": [
+            "剧情_出击B"
+        ]
+    },
+    "剧情_出击B": {
+        "recognition": "OCR",
+        "expected": [
+            "出击"
+        ],
+        "roi": [
+            1080,
+            650,
+            220,
+            80
+        ],
+        "action": "Click",
+        "post_delay": 8000,
+        "next": [
+            "剧情_战斗循环B"
+        ]
+    },
+    "剧情_战斗循环B": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "剧情战斗循环",
+        "custom_action_param": {
+            "type": "switch"
+        }
     },
 
     // 关卡详情弹窗 → 「作战准备」粉红大按钮 (实测约 968,558)

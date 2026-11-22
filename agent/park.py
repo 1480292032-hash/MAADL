@@ -754,27 +754,35 @@ DEFAULT_DAILY_ORDER = [
 ]
 
 
-def load_daily_order():
-    """读取日常执行顺序与推图参数，非法名剔除；配置缺失时用默认顺序"""
-    result = list(DEFAULT_DAILY_ORDER)
+def load_daily_config():
+    """读取清日常配置：order（执行顺序）+ 各子流程参数"""
+    cfg = {
+        "order": list(DEFAULT_DAILY_ORDER),
+        "park_mode": "hard",
+        "park_max_stages": 3,
+        "stage_name": "经验大作战",
+        "level": "深渊",
+        "times": 1,
+    }
     try:
         with open(_DAILY_CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         order = [s for s in data.get("order", []) if s in DAILY_STEPS]
         if order:
-            result = order
-        # 推图参数（模式/关数）挂在模块级变量，调度器读取后传给子流程
-        global DAILY_PARK_MODE, DAILY_PARK_MAX_STAGES
-        DAILY_PARK_MODE = str(data.get("park_mode", "hard"))
-        DAILY_PARK_MAX_STAGES = max(1, int(data.get("park_max_stages", 3)))
+            cfg["order"] = order
+        cfg["park_mode"] = data.get("park_mode", "hard")
+        cfg["park_max_stages"] = max(1, min(30, int(data.get("park_max_stages", 3))))
+        cfg["stage_name"] = str(data.get("stage_name", cfg["stage_name"]))
+        cfg["level"] = str(data.get("level", cfg["level"]))
+        cfg["times"] = max(1, min(9, int(data.get("times", 1))))
     except Exception:
-        DAILY_PARK_MODE = "hard"
-        DAILY_PARK_MAX_STAGES = 3
-    return result
+        pass
+    return cfg
 
 
-DAILY_PARK_MODE = "hard"
-DAILY_PARK_MAX_STAGES = 3
+def load_daily_order():
+    """读取日常执行顺序（兼容旧接口）"""
+    return load_daily_config()["order"]
 
 
 @AgentServer.custom_action("日常调度循环")
@@ -807,11 +815,12 @@ class DailyScheduler(CustomAction):
             # 剧情推图子流程：从 daily_config 读模式/关数作为参数传入
             override = None
             if step == "剧情推图":
+                dcfg = load_daily_config()
                 override = {
                     "剧情推图循环": {
                         "custom_action_param": {
-                            "mode": DAILY_PARK_MODE,
-                            "max_stages": DAILY_PARK_MAX_STAGES,
+                            "mode": dcfg["park_mode"],
+                            "max_stages": dcfg["park_max_stages"],
                         }
                     }
                 }
@@ -1275,3 +1284,217 @@ class StoryFarmAgent(CustomAction):
             return False
         _log("剧情推图收尾完成")
         return True
+
+
+# ---------- 每日副本（作战中心·日常页签） ----------
+
+DAILY_DUNGEON_ROUNDS = 60   # 单次战斗内轮次上限（10s/轮 ≈ 10 分钟，300 秒限时+余量）
+
+
+@AgentServer.custom_action("每日副本循环")
+class DailyDungeon(CustomAction):
+    """每日副本全流程 agent：
+    主界面 → 作战中心 → 日常页签 → 副本横向列表定位（OCR 副本名+滑动）
+    → 点副本卡片 → 级别节点图 → OCR 级别名点节点 → 详情 → 作战准备
+    → 编队（助战可开关）→ 出击 → 战斗 → 结算 → 回节点图 → 按次数循环
+    游戏每日挑战次数/体力不足时自动停止。副本名/级别/次数在网页配置中心设置。
+    """
+
+    def run(self, context, argv) -> bool:
+        cfg = load_daily_config()
+        stage_name = cfg["stage_name"]
+        level = cfg["level"]
+        times = cfg["times"]
+        _log(f"每日副本：{stage_name} · {level} 级别 × {times}")
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+
+        # 1. 主界面 → 作战中心 → 日常页签
+        if not _ensure_main_screen(context, ctrl):
+            return False
+        try:
+            context.run_action("剧情_从主界面进入")
+            time.sleep(2)
+            context.run_action("日常_点日常页签")
+            time.sleep(2)
+        except Exception as e:
+            _log(f"进日常页签异常: {e}")
+            return False
+
+        # 2. 副本横向列表定位（OCR 副本名 + 滑动）
+        if not self._locate_stage(context, ctrl, stage_name):
+            _log(f"未找到副本「{stage_name}」，结束")
+            return True
+
+        # 3. 点副本卡片 → 级别节点图
+        img = _shot(ctrl)
+        if _hit(context, img, "副本_级别图标题") is None:
+            _log("未进入级别节点图，结束")
+            return True
+
+        # 4. 级别定位 + 战斗循环
+        done = 0
+        node_rounds = 0
+        while done < times and node_rounds < 40:
+            node_rounds += 1
+            img = _shot(ctrl)
+            if img is None:
+                continue
+
+            # 游戏剩余次数 0 → 停止
+            remain = self._remain_times(context, img)
+            if remain == 0:
+                _log("游戏挑战次数已用完，停止")
+                break
+
+            # 级别节点定位（OCR 级别名）
+            lv = _hit(context, img, "副本_级别节点")
+            lv_override = {"副本_级别节点": {"expected": [level]}}
+            lv = _hit(context, img, "副本_级别节点", lv_override) if lv_override else None
+            # 直接用 override 精确匹配
+            lv = context.run_recognition("副本_级别节点", img, pipeline_override={
+                "副本_级别节点": {"expected": [level], "roi": [150, 280, 1050, 440]}
+            })
+            if lv is not None and lv.hit:
+                c = _box_center(lv)
+                _log(f"点击级别节点 {level}")
+                _click(ctrl, *c, 3.0)
+                # 详情 → 作战准备 → 编队 → 出击 → 战斗 → 回节点图
+                ok = self._run_one_battle(context, ctrl)
+                if ok is None:
+                    return False
+                if ok:
+                    done += 1
+                continue
+
+            # 级别节点不在当前可见区 → 滚动节点图
+            _log("级别节点不在可见区，滚动")
+            ctrl.post_swipe(1000, 450, 400, 450, 500).wait()
+            time.sleep(2.0)
+            if node_rounds > 12:
+                _log("未找到目标级别节点，停止")
+                break
+
+        # 5. 返回主界面
+        _ensure_main_screen(context, ctrl)
+        _log(f"每日副本完成（{done}/{times}）")
+        return True
+
+    def _remain_times(self, context, img):
+        """游戏每日挑战次数（右上「剩余次数 N」）"""
+        d = _hit(context, img, "副本_剩余次数")
+        if d is not None and d.hit:
+            text = getattr(d, "text", "") or ""
+            m = re.search(r"(\d+)", text)
+            if m:
+                return int(m.group(1))
+        return -1
+
+    def _locate_stage(self, context, ctrl, stage_name):
+        """作战中心副本横向列表：OCR 副本名定位并点击卡片（含滑动遍历）"""
+
+        def click(x, y, delay=2.0):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        for attempt in range(6):
+            img = shot()
+            card = _hit(context, img, "副本_卡片名称", pipeline_override={
+                "副本_卡片名称": {"expected": [stage_name], "roi": [120, 130, 1160, 300]}
+            })
+            if card is not None and card.hit:
+                c = _box_center(card)
+                _log(f"找到副本卡片 {stage_name} @ ({c[0]},{c[1]})")
+                click(*c, 2.0)
+                # 确认进入级别节点图
+                for _ in range(3):
+                    img = shot()
+                    if _hit(context, img, "副本_级别图标题") is not None and _hit(context, img, "副本_级别图标题").hit:
+                        return True
+                    time.sleep(1.5)
+                return False
+            # 未命中 → 滑动副本列表（左滑看右侧）
+            ctrl.post_swipe(1000, 360, 300, 360, 500).wait()
+            time.sleep(2.0)
+        return False
+
+    def _run_one_battle(self, context, ctrl):
+        """从节点图点击后到战斗结束回节点图。返回：True=打完一场；False=异常；None=致命"""
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        # 详情 → 作战准备
+        prep = wait_hit(context, ctrl, "剧情_作战准备", 8)
+        if prep is None:
+            _log("详情未出现作战准备按钮")
+            click(55, 35, 2.0)
+            return False
+        click(975, 558, 4.0)
+
+        # 编队页 → 出击
+        atk = wait_hit(context, ctrl, "剧情_出击", 10)
+        if atk is None:
+            _log("编队页未出现出击按钮（队伍不足？）")
+            click(55, 35, 2.0)
+            return False
+        click(1190, 678, 8.0)
+
+        # 战斗内循环（复用乐园同款瞬态处理 + 10s 检测）
+        battle_rounds = 0
+        while battle_rounds < DAILY_DUNGEON_ROUNDS:
+            battle_rounds += 1
+            img = _shot(ctrl)
+            if img is None:
+                time.sleep(2.0)
+                continue
+
+            # 回到级别节点图 → 完成
+            if _hit(context, img, "副本_级别图标题") is not None and _hit(context, img, "副本_级别图标题").hit:
+                _log("已回到级别节点图")
+                return True
+
+            # 结算页
+            end = _hit(context, img, "剧情_结算继续")
+            if end is not None and end.hit:
+                _log("战斗结束，推进结算")
+                click(1150, 710, 4.0)
+                click(1150, 710, 4.0)
+                continue
+
+            # 玩家信息弹窗
+            pi = _hit(context, img, "剧情_玩家信息取消")
+            if pi is not None and pi.hit:
+                click(858, 538, 2.0)
+                continue
+
+            # 战斗前对话跳过
+            skip = _hit(context, img, "剧情_战斗前对话跳过")
+            if skip is not None and skip.hit:
+                c = _box_center(skip)
+                click(*c, 1.5)
+                continue
+
+            time.sleep(10.0)
+
+        _log("单次副本战斗超时")
+        return None
+
+
+def wait_hit(context, ctrl, entry, seconds=8):
+    """轮询等待某识别节点命中（每 1.5s 截图一次）"""
+    for _ in range(int(seconds / 1.5)):
+        img = _shot(ctrl)
+        if img is None:
+            time.sleep(1.0)
+            continue
+        d = _hit(context, img, entry)
+        if d is not None and d.hit:
+            return d
+        time.sleep(1.5)
+    return None

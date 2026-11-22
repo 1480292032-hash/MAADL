@@ -742,24 +742,22 @@ class ArenaFight(CustomAction):
                 else:
                     click(1213, 33, delay=3.0)
 
-            # 主界面 → 竞技场建筑
+            # 主界面 → 作战中心·活动页签 → 竞技场卡片（2026-11-23 迁移）
             img = shot()
             if _hit(context, img, "日常_主界面确认") is None:
                 _log("导航：仍未到主界面，重试")
                 continue
-            _log("导航：已在主界面，点竞技场入口")
-            try:
-                context.run_action("日常_竞技场入口")
-                time.sleep(2)
-            except Exception as e:
-                _log(f"竞技场导航异常: {e}")
+            _log("导航：已在主界面，走活动页签进竞技场")
+            if not _navigate_activity(context, ctrl, "活动_竞技场卡片", "竞技场"):
+                _log("导航：活动页签未进入竞技场，重试")
                 continue
+            time.sleep(2)
 
             img = shot()
             if _hit(context, img, "竞技场_界面标题") is not None and _hit(context, img, "竞技场_界面标题").hit:
                 _log("导航：已到达竞技场界面")
                 return True
-            _log("导航：点击竞技场入口后未识别到竞技场界面")
+            _log("导航：点击竞技场卡片后未识别到竞技场界面")
         return False
 
 
@@ -778,6 +776,7 @@ DAILY_STEPS = {
     "追猎计划": "子流程_追猎计划",
     "特训矩阵": "子流程_特训矩阵",
     "竞技场": "子流程_竞技场",
+    "精灵试炼": "子流程_精灵试炼",
     "世界之眼": "子流程_世界之眼",
     "魔女日程": "子流程_魔女日程",
     "每日副本": "子流程_每日副本",
@@ -963,6 +962,78 @@ def _ensure_main_screen(context, ctrl):
 STORY_FARM_ROUNDS = 40      # 地图页轮次上限（防意外死循环）
 BATTLE_ROUNDS_LIMIT = 70    # 单关战斗内轮次上限（5s/轮 ≈ 6 分钟，300 秒限时+余量）
 MODE_BUTTON_ROI = [1060, 95, 220, 60]
+
+
+def _navigate_activity(context, ctrl, card_entry, card_name, partial_names=None):
+    """主界面之后：作战中心 → 活动页签 → 定位玩法卡片并进入。
+
+    卡片交互规律（2026-11-23 实测）：点非居中卡片 = 列表滚动把它移到居中；
+    点居中卡片 = 进入该玩法页；列表记住上次浏览位置，大距离滑动会回弹到端点。
+    partial_names: 目标卡片被屏幕边缘裁切时只露出的部分名（如「精灵试炼」在左
+    边缘只露「精灵」二字）——命中部分名即点击使其居中，居中后用 card_entry
+    精确验证全名再进入，防止部分名误中其他玩法（如「精灵特训」）。
+    由调用方保证当前在主界面。返回 True = 已点击居中卡片（进入动作已发出）。
+    """
+    def shot():
+        return _shot(ctrl)
+
+    try:
+        context.run_action("剧情_从主界面进入")
+        time.sleep(2)
+    except Exception as e:
+        _log(f"进作战中心异常: {e}")
+        return False
+
+    for attempt in range(3):
+        _click(ctrl, 60, 310, 3.0)   # 左栏「活动」页签
+        img = shot()
+        t = _hit(context, img, "活动_页签选中")
+        if t is not None and t.hit:
+            _log("已进入作战·活动页")
+            break
+    else:
+        _log("3 次尝试未进入活动页签")
+        return False
+
+    for attempt in range(8):
+        img = shot()
+        card = context.run_recognition(card_entry, img)
+        target = None
+        if card is not None and card.hit:
+            target = _box_center(card)
+        elif partial_names:
+            # 精确名未命中 → 扫卡片名 OCR 结果找部分名（边缘裁切态）
+            broad = context.run_recognition("活动_卡片名称", img)
+            if broad is not None:
+                for r in (broad.all_results or []):
+                    txt = getattr(r, "text", "") or ""
+                    b = getattr(r, "box", None)
+                    if b and any(p in txt for p in partial_names):
+                        cx = b[0] + b[2] / 2
+                        if not (540 <= cx <= 850):
+                            target = (cx, b[1] + b[3] / 2)
+                        break
+        if target is not None:
+            if 540 <= target[0] <= 850:
+                # 已居中 → 精确验证全名后进入（防部分名误中其他玩法）
+                v = context.run_recognition(card_entry, img)
+                if v is not None and v.hit:
+                    _log(f"点击居中卡片进入 {card_name}")
+                    _click(ctrl, target[0], target[1], 3.5)
+                    return True
+                _log(f"居中卡片非 {card_name}（部分名误中），滑动跳过")
+            else:
+                _log(f"{card_name} 部分可见（x={target[0]}），点击使其居中")
+                _click(ctrl, target[0], target[1], 2.8)
+                time.sleep(2.5)
+                continue
+        _log(f"{card_name} 不在可见区（attempt {attempt}），滑动")
+        if attempt % 2 == 0:
+            ctrl.post_swipe(1000, 360, 300, 360, 500).wait()   # 左滑看右侧
+        else:
+            ctrl.post_swipe(300, 360, 1000, 360, 500).wait()   # 右滑看左侧
+        time.sleep(2.0)
+    return False
 
 
 def _stars_gold(context, img, box):
@@ -1548,6 +1619,180 @@ class DailyDungeon(CustomAction):
             time.sleep(10.0)
 
         _log("单次副本战斗超时")
+        return None
+
+
+@AgentServer.custom_action("精灵试炼循环")
+class SpiritTrial(CustomAction):
+    """精灵试炼：每天挑战 3 个随机对手（难度递增 普通→困难→噩梦），
+    胜利后领挑战奖励。全流程 2026-11-23 实机校准：
+    进入准备(1227,685) → [精灵选择弹窗→点默认] → 作战准备页出击(1210,680)
+    → 对手介绍页点屏幕跳过 → 自动战斗（实测速胜）→ 结算(1150,710)
+    → 自动回试炼页并切下一个对手；3 胜后左下礼盒发光 → 点 (95,605) 领奖
+    （实测奖励：钻石 600 + 金币 20000 + 凭证 4，消耗 10 体力/场）。
+    """
+
+    def run(self, context, argv) -> bool:
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+        _log("精灵试炼：开始")
+
+        if not _ensure_main_screen(context, ctrl):
+            return False
+        if not _navigate_activity(context, ctrl, "活动_精灵试炼卡片", "精灵试炼", partial_names=["精灵"]):
+            _log("未进入精灵试炼页，结束")
+            _ensure_main_screen(context, ctrl)
+            return True
+        time.sleep(2)
+
+        wins = 0
+        claimed = False
+        rounds = 0
+        while rounds < 15:
+            rounds += 1
+            img = _shot(ctrl)
+            if img is None:
+                time.sleep(2.0)
+                continue
+
+            # 瞬态界面（结算/弹窗/介绍页）优先处理
+            if self._handle_transient(context, ctrl, img):
+                continue
+
+            # 界面守卫：不在精灵试炼页 → 重新导航
+            t = _hit(context, img, "精灵试炼_页标题")
+            if t is None or not t.hit:
+                _log("不在精灵试炼页，重新导航")
+                if not _ensure_main_screen(context, ctrl):
+                    return False
+                if not _navigate_activity(context, ctrl, "活动_精灵试炼卡片", "精灵试炼", partial_names=["精灵"]):
+                    _log("重新导航失败，结束")
+                    break
+                continue
+
+            # 3 胜礼盒发光 → 领挑战奖励
+            gift = _hit(context, img, "精灵试炼_礼盒")
+            if gift is not None and gift.hit:
+                if not claimed:
+                    _log("3 胜完成，领挑战奖励")
+                    _click(ctrl, 95, 605, 4.0)
+                    claimed = True
+                    for _ in range(6):
+                        time.sleep(2.0)
+                        img = _shot(ctrl)
+                        g = _hit(context, img, "世界之眼_获得物品关闭")
+                        if g is not None and g.hit:
+                            _log("挑战奖励已领取")
+                            _click(ctrl, 55, 35, 2.0)
+                            break
+                    continue
+                _log("挑战奖励已领取，精灵试炼完成")
+                break
+
+            # 进入准备 → 出击 → 战斗
+            prep = _hit(context, img, "精灵试炼_进入准备")
+            if prep is not None and prep.hit:
+                c = _box_center(prep)
+                _log(f"点击进入准备 @ ({c[0]},{c[1]})")
+                _click(ctrl, *c, 3.5)
+                # 等作战准备页出击（途中可能弹「精灵选择」编队弹窗 → 点默认）
+                at_prep = False
+                for _ in range(8):
+                    img = _shot(ctrl)
+                    if img is None:
+                        time.sleep(1.5)
+                        continue
+                    d = _hit(context, img, "精灵试炼_编队默认")
+                    if d is not None and d.hit:
+                        dc = _box_center(d)
+                        _log("精灵选择弹窗，点默认")
+                        _click(ctrl, *dc, 2.5)
+                        continue
+                    a = _hit(context, img, "剧情_出击")
+                    if a is not None and a.hit:
+                        at_prep = True
+                        break
+                    time.sleep(1.5)
+                if not at_prep:
+                    _log("未出现出击按钮（今日已完成？），结束")
+                    break
+                ok = self._battle_one(context, ctrl)
+                if ok is None:
+                    _ensure_main_screen(context, ctrl)
+                    return False
+                if ok:
+                    wins += 1
+                    _log(f"精灵试炼进度 {wins}/3")
+                continue
+
+            time.sleep(3.0)
+
+        _ensure_main_screen(context, ctrl)
+        _log(f"精灵试炼结束（胜 {wins} 场）")
+        return True
+
+    def _handle_transient(self, context, ctrl, img):
+        """战斗结算/玩家信息弹窗等瞬态界面处理，处理了返回 True"""
+        end = _hit(context, img, "剧情_结算继续")
+        if end is not None and end.hit:
+            _click(ctrl, 1150, 710, 4.0)
+            _click(ctrl, 1150, 710, 4.0)
+            return True
+        pi = _hit(context, img, "剧情_玩家信息取消")
+        if pi is not None and pi.hit:
+            _click(ctrl, 858, 538, 2.0)
+            return True
+        return False
+
+    def _battle_one(self, context, ctrl):
+        """从作战·准备页出击 → 战斗 → 回精灵试炼页。
+        True=打完一场；False=本场异常；None=致命"""
+        def shot():
+            return _shot(ctrl)
+
+        img = shot()
+        a = _hit(context, img, "剧情_出击")
+        if a is None or not a.hit:
+            a = wait_hit(context, ctrl, "剧情_出击", 6)
+            if a is None:
+                _log("出击按钮未出现")
+                _click(ctrl, 55, 35, 2.0)
+                return False
+        ac = _box_center(a)
+        _click(ctrl, *ac, 6.0)
+
+        # 对手介绍页（四糸乃/崇宫澪等大图）→ 点屏幕跳过
+        time.sleep(3)
+        _click(ctrl, 640, 400, 4.0)
+
+        battle_rounds = 0
+        while battle_rounds < DAILY_DUNGEON_ROUNDS:
+            battle_rounds += 1
+            img = _shot(ctrl)
+            if img is None:
+                time.sleep(2.0)
+                continue
+
+            # 回到精灵试炼页 → 完成
+            t = _hit(context, img, "精灵试炼_页标题")
+            if t is not None and t.hit:
+                return True
+
+            end = _hit(context, img, "剧情_结算继续")
+            if end is not None and end.hit:
+                _click(ctrl, 1150, 710, 4.0)
+                _click(ctrl, 1150, 710, 4.0)
+                continue
+
+            pi = _hit(context, img, "剧情_玩家信息取消")
+            if pi is not None and pi.hit:
+                _click(ctrl, 858, 538, 2.0)
+                continue
+
+            time.sleep(8.0)
+
+        _log("精灵试炼单场战斗超时")
         return None
 
 

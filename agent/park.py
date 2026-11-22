@@ -985,7 +985,7 @@ def _navigate_activity(context, ctrl, card_entry, card_name, partial_names=None)
         return False
 
     for attempt in range(3):
-        _click(ctrl, 60, 310, 3.0)   # 左栏「活动」页签
+        _click(ctrl, 60, 345, 3.0)   # 左栏「活动」页签（高亮区实测 y 294-396）
         img = shot()
         t = _hit(context, img, "活动_页签选中")
         if t is not None and t.hit:

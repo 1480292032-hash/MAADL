@@ -162,16 +162,20 @@ def _click(ctrl, x, y, delay=1.0):
 
 
 def _shot(ctrl):
-    """模拟器截图（偶发失败返回空图，自动重试 3 次）"""
+    """模拟器截图：轮询等待完成（最多 15 秒/次，防模拟器截图卡死），重试 3 次"""
     for _ in range(3):
         try:
-            img = ctrl.post_screencap().get(wait=True)
+            job = ctrl.post_screencap()
+            for _w in range(15):
+                if job.done:
+                    img = job.get()
+                    if img is not None and getattr(img, "size", 0) > 0:
+                        return img
+                    break
+                time.sleep(1.0)
+            _log("截图超时/失败，重试")
         except Exception as e:
             _log(f"截图异常: {e}")
-            time.sleep(1.0)
-            continue
-        if img is not None and getattr(img, "size", 0) > 0:
-            return img
         time.sleep(1.0)
     return None
 
@@ -1329,11 +1333,10 @@ class DailyDungeon(CustomAction):
             _log(f"进作战中心异常: {e}")
             return False
         for attempt in range(3):
-            click(60, 315, 3.0)   # 点左栏「日常」页签
+            _click(ctrl, 60, 220, 3.0)   # 点左栏「日常」页签（实测 60,220）
             img = _shot(ctrl)
-            in_daily = (_hit(context, img, "副本_级别图标题") is not None
-                        and _hit(context, img, "副本_级别图标题").hit)
-            if in_daily:
+            t = _hit(context, img, "副本_日常页签选中")
+            if t is not None and t.hit:
                 _log("已进入作战·日常页")
                 break
         else:
@@ -1345,9 +1348,10 @@ class DailyDungeon(CustomAction):
             _log(f"未找到副本「{stage_name}」，结束")
             return True
 
-        # 3. 点副本卡片 → 级别节点图
+        # 3. 点副本卡片 → 级别节点图（_locate_stage 内已确认，此处仅防御性复查）
         img = _shot(ctrl)
-        if _hit(context, img, "副本_级别图标题") is None:
+        t = _hit(context, img, "副本_级别图标题")
+        if t is None or not t.hit:
             _log("未进入级别节点图，结束")
             return True
 
@@ -1360,24 +1364,30 @@ class DailyDungeon(CustomAction):
             if img is None:
                 continue
 
+            # 界面守卫：不在级别节点图（如上次战斗失败返回后已回列表页）→ 重新定位
+            t = _hit(context, img, "副本_级别图标题")
+            if t is None or not t.hit:
+                _log("不在级别节点图，重新定位副本")
+                if not self._locate_stage(context, ctrl, stage_name):
+                    _log("重新定位副本失败，停止")
+                    break
+                continue
+
             # 游戏剩余次数 0 → 停止
             remain = self._remain_times(context, img)
             if remain == 0:
                 _log("游戏挑战次数已用完，停止")
                 break
 
-            # 级别节点定位（OCR 级别名）
-            lv = _hit(context, img, "副本_级别节点")
-            lv_override = {"副本_级别节点": {"expected": [level]}}
-            lv = _hit(context, img, "副本_级别节点", lv_override) if lv_override else None
-            # 直接用 override 精确匹配
+            # 级别节点定位（OCR 级别名，override 精确匹配）
             lv = context.run_recognition("副本_级别节点", img, pipeline_override={
                 "副本_级别节点": {"expected": [level], "roi": [150, 280, 1050, 440]}
             })
             if lv is not None and lv.hit:
                 c = _box_center(lv)
-                _log(f"点击级别节点 {level}")
-                _click(ctrl, *c, 3.0)
+                # 标签文字在节点本体下方约 105px，点标签无效，要点上方的六边形节点
+                _log(f"点击级别节点 {level} @ ({c[0]},{c[1] - 105})")
+                _click(ctrl, c[0], c[1] - 105, 3.0)
                 # 详情 → 作战准备 → 编队 → 出击 → 战斗 → 回节点图
                 ok = self._run_one_battle(context, ctrl)
                 if ok is None:
@@ -1423,8 +1433,8 @@ class DailyDungeon(CustomAction):
             if img is None:
                 time.sleep(2.0)
                 continue
-            card = _hit(context, img, "副本_卡片名称", pipeline_override={
-                "副本_卡片名称": {"expected": [stage_name], "roi": [120, 130, 1160, 300]}
+            card = context.run_recognition("副本_卡片名称", img, pipeline_override={
+                "副本_卡片名称": {"expected": [stage_name], "roi": [120, 100, 1160, 400]}
             })
             if card is not None and card.hit:
                 c = _box_center(card)
@@ -1433,7 +1443,8 @@ class DailyDungeon(CustomAction):
                 # 确认进入级别节点图
                 for _ in range(3):
                     img = shot()
-                    if _hit(context, img, "副本_级别图标题") is not None and _hit(context, img, "副本_级别图标题").hit:
+                    t = _hit(context, img, "副本_级别图标题")
+                    if t is not None and t.hit:
                         _log("已进入级别节点图")
                         return True
                     time.sleep(1.5)
@@ -1478,7 +1489,8 @@ class DailyDungeon(CustomAction):
                 continue
 
             # 回到级别节点图 → 完成
-            if _hit(context, img, "副本_级别图标题") is not None and _hit(context, img, "副本_级别图标题").hit:
+            t = _hit(context, img, "副本_级别图标题")
+            if t is not None and t.hit:
                 _log("已回到级别节点图")
                 return True
 

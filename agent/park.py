@@ -475,7 +475,7 @@ class StoryFight(CustomAction):
 
 ARENA_BATTLE_ROUNDS = 130  # 单把战斗内层轮次上限（10s/轮 ≈ 21 分钟），超出按异常处理
 AUTO_BUTTON = (445, 45)    # 战斗内「自动」按钮（点两次切 2 倍速）
-ARENA_MATCH_BTN = (1178, 710)
+ARENA_MATCH_BTN = (1200, 665)   # 右下「匹配」按钮中心（2026-11-23 实测，原 1178,710 点在按钮外）
 ARENA_REWARD_BTN = (200, 690)
 ARENA_POPUP_CLOSE = (55, 35)      # 关提示/关弹窗通用返回位
 ARENA_REWARD_CLOSE_X = (1022, 155)  # 作战奖励弹窗 X
@@ -513,7 +513,7 @@ class ArenaFight(CustomAction):
                 _log("无法回到竞技场界面，结束")
                 return False
 
-            # 点「匹配」
+            # 点「匹配」（用 OCR box 中心，常量坐标曾点在按钮边缘外）
             img = shot()
             match_btn = _hit(context, img, "竞技场_匹配按钮")
             if match_btn is None or not match_btn.hit:
@@ -523,7 +523,27 @@ class ArenaFight(CustomAction):
                 _log(f"竞技场界面未找到匹配按钮（标题识别: {t_text!r} box={t_box}）")
                 click(*BACK_POS, delay=2.0)
                 return True
-            click(*ARENA_MATCH_BTN, delay=2.5)
+            mc = _box_center(match_btn)
+            click(*mc, delay=2.5)
+
+            # 匹配是否生效（竞技场有开放时段，非开放时段点击无任何反应，
+            # 曾在凌晨实测按钮点击无效）→ 3 次尝试无变化则安全跳过
+            entered = False
+            for _ in range(3):
+                img = shot()
+                ms = _hit(context, img, "竞技场_匹配成功")
+                if ms is not None and ms.hit:
+                    entered = True
+                    break
+                t = _hit(context, img, "竞技场_界面标题")
+                if t is None or not t.hit:
+                    # 画面已离开竞技场 → 匹配生效（进入匹配/战斗流程）
+                    entered = True
+                    break
+                click(*mc, delay=4.0)   # 无变化，再试一次
+            if not entered:
+                _log("匹配按钮无响应（竞技场可能未到开放时段），跳过")
+                return True
 
             img = shot()
             if _hit(context, img, "竞技场_未开启提示") is not None and _hit(context, img, "竞技场_未开启提示").hit:
@@ -747,17 +767,20 @@ class ArenaFight(CustomAction):
 
 # 子流程显示名 → pipeline 入口节点名
 DAILY_STEPS = {
-    "签到": "日常_签到",
-    "补给站": "日常_补给站入口",
-    "邮件": "日常_邮件入口",
-    "联络": "日常_联络入口",
-    "社团": "日常_社团入口",
-    "次元入侵": "日常_入侵入口",
-    "追猎计划": "日常_追猎入口",
-    "特训矩阵": "日常_特训入口",
-    "竞技场": "日常_竞技场入口",
-    "世界之眼": "世界之眼_入口",
-    "魔女日程": "日常_魔女日程入口",
+    # 值为「子流程组合节点」（JumpBack 平铺该子流程全部节点，
+    # 入口节点 next 为空不能直接用——run_task 只会点一下入口就结束）
+    "签到": "子流程_签到",
+    "补给站": "子流程_补给站",
+    "邮件": "子流程_邮件",
+    "联络": "子流程_联络",
+    "社团": "子流程_社团",
+    "次元入侵": "子流程_次元入侵",
+    "追猎计划": "子流程_追猎计划",
+    "特训矩阵": "子流程_特训矩阵",
+    "竞技场": "子流程_竞技场",
+    "世界之眼": "子流程_世界之眼",
+    "魔女日程": "子流程_魔女日程",
+    "每日副本": "子流程_每日副本",
     "剧情推图": "剧情推图循环",
 }
 
@@ -1358,6 +1381,7 @@ class DailyDungeon(CustomAction):
         # 4. 级别定位 + 战斗循环
         done = 0
         node_rounds = 0
+        fail_streak = 0   # 连续进攻失败次数（次数用完/异常），连 3 次停止防死循环
         while done < times and node_rounds < 40:
             node_rounds += 1
             img = _shot(ctrl)
@@ -1394,6 +1418,12 @@ class DailyDungeon(CustomAction):
                     return False
                 if ok:
                     done += 1
+                    fail_streak = 0
+                else:
+                    fail_streak += 1
+                    if fail_streak >= 3:
+                        _log("连续 3 次进攻失败（次数用完/异常），停止")
+                        break
                 continue
 
             # 级别节点不在当前可见区 → 滚动节点图
@@ -1410,11 +1440,11 @@ class DailyDungeon(CustomAction):
         return True
 
     def _remain_times(self, context, img):
-        """游戏每日挑战次数（右上「剩余次数 N」）"""
+        """游戏每日挑战次数（右上「剩余次数 N」，数字为艺术字，在 all_results 里）"""
         d = _hit(context, img, "副本_剩余次数")
         if d is not None and d.hit:
-            text = getattr(d, "text", "") or ""
-            m = re.search(r"(\d+)", text)
+            texts = [getattr(r, "text", "") or "" for r in (getattr(d, "all_results", None) or [])]
+            m = re.search(r"(\d+)", "".join(texts))
             if m:
                 return int(m.group(1))
         return -1

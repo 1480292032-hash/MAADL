@@ -1796,6 +1796,198 @@
         ]
     },
 
+    // ============================================
+    // 调度器子流程组合节点（agent DailyScheduler 按 order 逐个 run_task）
+    // 每个组合节点 = 该子流程全部节点 JumpBack 平铺（扫完无匹配超时结束）
+    // 战斗类子流程末尾的非 JumpBack Custom 节点执行一次后任务结束，不会死循环
+    // ============================================
+
+    "子流程_社团": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_社团钻石确认",
+            "[JumpBack]日常_社团返回",
+            "[JumpBack]日常_社团申请补给",
+            "[JumpBack]日常_社团空投补给",
+            "[JumpBack]日常_社团入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_次元入侵": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]剧情_结算继续",
+            "[JumpBack]剧情_战斗前对话跳过",
+            "[JumpBack]剧情_战斗中待机",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_入侵返回",
+            "[JumpBack]日常_入侵出击",
+            "[JumpBack]日常_入侵前往准备",
+            "[JumpBack]日常_入侵入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_追猎计划": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]剧情_结算继续",
+            "[JumpBack]剧情_战斗前对话跳过",
+            "[JumpBack]剧情_战斗中待机",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_追猎返回",
+            "[JumpBack]日常_追猎奖励领取",
+            "[JumpBack]日常_奖励页签伤害",
+            "[JumpBack]日常_奖励页签击杀",
+            "[JumpBack]日常_奖励页签首通",
+            "[JumpBack]日常_追猎作战奖励",
+            "[JumpBack]日常_追猎出击",
+            "[JumpBack]日常_追猎进入",
+            "[JumpBack]日常_追猎入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_特训矩阵": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]剧情_结算继续",
+            "[JumpBack]剧情_战斗前对话跳过",
+            "[JumpBack]剧情_战斗中待机",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_特训返回",
+            "[JumpBack]日常_特训挑战",
+            "[JumpBack]日常_特训入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_竞技场": {
+        "recognition": "DirectHit",
+        // 竞技场全流程（导航/匹配/倍速/结算/领奖励/计数）都在 agent
+        // ArenaFight 内（_goto_arena 自带闪退恢复），pipeline 侧不能再放
+        // 「匹配按钮」等识别——它恒命中会挡住兜底的 agent 循环造成死循环
+        "next": [
+            "竞技场_战斗循环"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_世界之眼": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]世界之眼_返回主界面",
+            "[JumpBack]世界之眼_探索掉落领取",
+            "[JumpBack]世界之眼_获得物品关闭",
+            "[JumpBack]世界之眼_快速探索",
+            "[JumpBack]世界之眼_采集已满",
+            "[JumpBack]世界之眼_入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_魔女日程": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_魔女日程返回",
+            "[JumpBack]魔女日程_周常领取",
+            "[JumpBack]魔女日程_切周常页签",
+            "[JumpBack]魔女日程_奖励一键领取",
+            "[JumpBack]魔女日程_弹窗一键领取",
+            "[JumpBack]魔女日程_切奖励页签",
+            "[JumpBack]魔女日程_竖排一键领取",
+            "[JumpBack]魔女日程_切日常页签",
+            "[JumpBack]日常_魔女日程入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_签到": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_签到返回",
+            "[JumpBack]日常_签到按钮",
+            "[JumpBack]日常_签到"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_补给站": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_补给站返回",
+            "[JumpBack]日常_月卡签到",
+            "[JumpBack]日常_补给站特权卡页签",
+            "[JumpBack]日常_补给站领取",
+            "[JumpBack]日常_补给站培养专区",
+            "[JumpBack]日常_补给站入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_邮件": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_邮件返回",
+            "[JumpBack]日常_邮件一键领取",
+            "[JumpBack]日常_邮件入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_联络": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]日常_领取成功确认",
+            "[JumpBack]日常_联络返回",
+            "[JumpBack]日常_联络一键领取",
+            "[JumpBack]日常_联络一键赠送",
+            "[JumpBack]日常_联络入口"
+        ],
+        "timeout": 30000
+    },
+
+    "子流程_每日副本": {
+        "recognition": "DirectHit",
+        "next": [
+            "[JumpBack]通用_关闭弹窗",
+            "[JumpBack]通用_网络重连",
+            "[JumpBack]剧情_结算继续",
+            "[JumpBack]剧情_战斗前对话跳过",
+            "[JumpBack]剧情_战斗中待机",
+            "[JumpBack]剧情_玩家信息取消",
+            "日常_每日副本"
+        ],
+        "timeout": 30000
+    },
+
     // 所有日常节点不再命中（或超时）时结束任务
     "日常_结束": {
         "recognition": "DirectHit",

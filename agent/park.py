@@ -443,7 +443,11 @@ class StoryFight(CustomAction):
                     _click(ctrl, *c, 5.0)  # 点完等 5 秒再识别
                     continue
             elif task_type == "switch":
-                pass  # 待用户确认出场技按钮位置后补
+                # 出场技 = 切换角色时自动触发：交替点右上两个角色头像
+                # 切角色 10 秒冷却单独计算，battle 循环 10s/轮刚好匹配冷却节奏
+                head = (1165, 140) if battle_rounds % 2 == 0 else (1165, 255)
+                _log("切换出场角色触发出场技")
+                _click(ctrl, *head, 1.0)
 
             time.sleep(3)
         else:

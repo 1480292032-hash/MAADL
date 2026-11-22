@@ -104,8 +104,17 @@ BACK_POS = (55, 35)           # 返回按钮（关弹窗/退界面两用）
 _RECO_TIMEOUT_NOTE = "识别异常"
 
 
+_LOG_FILE = os.path.join(_PROJECT_DIR, "debug", "agent_log.txt")
+
+
 def _log(msg: str):
-    print(f"[park] {msg}", flush=True)
+    line = f"[park] {msg}"
+    print(line, flush=True)
+    try:
+        with open(_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
 def _hit(context, image, entry):
@@ -1310,17 +1319,26 @@ class DailyDungeon(CustomAction):
         if ctrl is None:
             return False
 
-        # 1. 主界面 → 作战中心 → 日常页签
+        # 1. 主界面 → 作战中心 → 日常页签（带确认重试）
         if not _ensure_main_screen(context, ctrl):
             return False
         try:
             context.run_action("剧情_从主界面进入")
             time.sleep(2)
-            context.run_action("日常_点日常页签")
-            time.sleep(2)
         except Exception as e:
-            _log(f"进日常页签异常: {e}")
+            _log(f"进作战中心异常: {e}")
             return False
+        for attempt in range(3):
+            click(60, 315, 3.0)   # 点左栏「日常」页签
+            img = _shot(ctrl)
+            in_daily = (_hit(context, img, "副本_级别图标题") is not None
+                        and _hit(context, img, "副本_级别图标题").hit)
+            if in_daily:
+                _log("已进入作战·日常页")
+                break
+        else:
+            _log("3 次尝试未进入日常页签，结束")
+            return True
 
         # 2. 副本横向列表定位（OCR 副本名 + 滑动）
         if not self._locate_stage(context, ctrl, stage_name):
@@ -1402,6 +1420,9 @@ class DailyDungeon(CustomAction):
 
         for attempt in range(6):
             img = shot()
+            if img is None:
+                time.sleep(2.0)
+                continue
             card = _hit(context, img, "副本_卡片名称", pipeline_override={
                 "副本_卡片名称": {"expected": [stage_name], "roi": [120, 130, 1160, 300]}
             })
@@ -1413,10 +1434,12 @@ class DailyDungeon(CustomAction):
                 for _ in range(3):
                     img = shot()
                     if _hit(context, img, "副本_级别图标题") is not None and _hit(context, img, "副本_级别图标题").hit:
+                        _log("已进入级别节点图")
                         return True
                     time.sleep(1.5)
                 return False
             # 未命中 → 滑动副本列表（左滑看右侧）
+            _log(f"副本 {stage_name} 未在可见区（attempt {attempt}），滑动列表")
             ctrl.post_swipe(1000, 360, 300, 360, 500).wait()
             time.sleep(2.0)
         return False

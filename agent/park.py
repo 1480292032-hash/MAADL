@@ -378,7 +378,7 @@ class ParkStateReco(CustomRecognition):
 
 # ---------- 竞技场（青铜战场） ----------
 
-ARENA_BATTLE_ROUNDS = 320  # 单把战斗内层轮次上限（约 4s/轮 ≈ 21 分钟），超出按异常处理
+ARENA_BATTLE_ROUNDS = 130  # 单把战斗内层轮次上限（10s/轮 ≈ 21 分钟），超出按异常处理
 AUTO_BUTTON = (445, 45)    # 战斗内「自动」按钮（点两次切 2 倍速）
 ARENA_MATCH_BTN = (1178, 710)
 ARENA_REWARD_BTN = (200, 690)
@@ -447,7 +447,7 @@ class ArenaFight(CustomAction):
                     break
                 time.sleep(2)
 
-            # 战斗内循环：倍速 X2 → 等待战斗结束
+            # 战斗内循环：倍速 X2 → 每 10 秒检测一次 → 等待战斗结束
             speed_clicked = False
             battle_rounds = 0
             while battle_rounds < ARENA_BATTLE_ROUNDS:
@@ -457,13 +457,20 @@ class ArenaFight(CustomAction):
                     time.sleep(2.0)
                     continue
 
-                # 结算页：「战斗结束」艺术字 or 右下「点击屏幕继续」→ 点安全区推进
+                # 玩家信息弹窗（误点助战头像弹出）→ 点「取消」不添加好友
+                player_info = _hit(context, img, "竞技场_玩家信息弹窗")
+                if player_info is not None and player_info.hit:
+                    _log("误触玩家信息弹窗，点取消")
+                    click(858, 538, delay=2.0)
+                    continue
+
+                # 结算页：「战斗结束」艺术字 or 右下「点击屏幕继续」→ 点右下文字区推进（避开助战头像）
                 end_page = _hit(context, img, "竞技场_战斗结束")
                 cont_btn = _hit(context, img, "竞技场_继续按钮")
                 if (end_page is not None and end_page.hit) or (cont_btn is not None and cont_btn.hit):
                     _log("战斗结束，点屏幕推进结算")
-                    click(500, 300, delay=3.0)
-                    click(500, 300, delay=3.0)
+                    click(1150, 710, delay=4.0)
+                    click(1150, 710, delay=4.0)
                     break
 
                 # 战斗进行中：首轮点两次「自动」切 2 倍速
@@ -474,7 +481,7 @@ class ArenaFight(CustomAction):
                         click(*AUTO_BUTTON, delay=1.2)
                         click(*AUTO_BUTTON, delay=1.2)
                         speed_clicked = True
-                    time.sleep(3.5)
+                    time.sleep(10)
                     continue
 
                 # 战斗前剧情对话（偶发）→ 跳过
@@ -485,9 +492,9 @@ class ArenaFight(CustomAction):
                         click(*center, delay=1.5)
                     continue
 
-                time.sleep(3.5)
+                time.sleep(10)
             else:
-                _log("单把战斗超时（超过 21 分钟），异常结束")
+                _log("单把战斗超时（超过 20 分钟），异常结束")
                 return False
 
             # 回到竞技场界面 → 领取左下「奖励」→ 计数

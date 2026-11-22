@@ -28,6 +28,7 @@
             "[JumpBack]剧情_战斗前对话跳过",
             "[JumpBack]剧情_战斗中待机",
             "[JumpBack]剧情_编入队伍",
+            "[JumpBack]剧情_编队助战",
             "[JumpBack]剧情_出击",
             "[JumpBack]剧情_作战准备",
             "[JumpBack]剧情_选关卡节点",
@@ -196,6 +197,33 @@
             140
         ],
         "action": "Click",
+        "post_delay": 2000,
+        "next": []
+    },
+
+    // 编队页助战（可开关，默认关）：右侧「助战」栏标题命中 → 点好友头像列区域
+    // MaaFW Click target 为矩形时在矩形内随机选点 → 随机邀请一个好友助战
+    // 开关在 interface.json「编队助战」选项（剧情推图任务）
+    "剧情_编队助战": {
+        "enabled": false,
+        "recognition": "OCR",
+        "expected": [
+            "助战"
+        ],
+        "roi": [
+            760,
+            140,
+            120,
+            60
+        ],
+        "max_hit": 3,
+        "action": "Click",
+        "target": [
+            1130,
+            240,
+            80,
+            420
+        ],
         "post_delay": 2000,
         "next": []
     },

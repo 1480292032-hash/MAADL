@@ -745,6 +745,7 @@ DAILY_STEPS = {
     "竞技场": "日常_竞技场入口",
     "世界之眼": "世界之眼_入口",
     "魔女日程": "日常_魔女日程入口",
+    "剧情推图": "剧情推图循环",
 }
 
 DEFAULT_DAILY_ORDER = [
@@ -754,16 +755,26 @@ DEFAULT_DAILY_ORDER = [
 
 
 def load_daily_order():
-    """读取日常执行顺序，非法名剔除；配置缺失时用默认顺序"""
+    """读取日常执行顺序与推图参数，非法名剔除；配置缺失时用默认顺序"""
+    result = list(DEFAULT_DAILY_ORDER)
     try:
         with open(_DAILY_CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
         order = [s for s in data.get("order", []) if s in DAILY_STEPS]
         if order:
-            return order
+            result = order
+        # 推图参数（模式/关数）挂在模块级变量，调度器读取后传给子流程
+        global DAILY_PARK_MODE, DAILY_PARK_MAX_STAGES
+        DAILY_PARK_MODE = str(data.get("park_mode", "hard"))
+        DAILY_PARK_MAX_STAGES = max(1, int(data.get("park_max_stages", 3)))
     except Exception:
-        pass
-    return list(DEFAULT_DAILY_ORDER)
+        DAILY_PARK_MODE = "hard"
+        DAILY_PARK_MAX_STAGES = 3
+    return result
+
+
+DAILY_PARK_MODE = "hard"
+DAILY_PARK_MAX_STAGES = 3
 
 
 @AgentServer.custom_action("日常调度循环")
@@ -792,8 +803,21 @@ class DailyScheduler(CustomAction):
                 return False
 
             _log(f"执行日常：{step}")
+
+            # 剧情推图子流程：从 daily_config 读模式/关数作为参数传入
+            override = None
+            if step == "剧情推图":
+                override = {
+                    "剧情推图循环": {
+                        "custom_action_param": {
+                            "mode": DAILY_PARK_MODE,
+                            "max_stages": DAILY_PARK_MAX_STAGES,
+                        }
+                    }
+                }
+
             try:
-                context.run_task(entry)
+                context.run_task(entry, pipeline_override=override)
                 time.sleep(2.0)
             except Exception as e:
                 _log(f"子流程 {step} 异常: {e}")
@@ -802,7 +826,10 @@ class DailyScheduler(CustomAction):
         return True
 
     def _ensure_main(self, context, ctrl):
-        """确保回到主界面（最多 3 轮：游戏启动 + 返回位 + 家园兜底）"""
+        """确保回到主界面（委托模块级实现）"""
+        return _ensure_main_screen(context, ctrl)
+
+    def _ensure_main_old(self, context, ctrl):
 
         def click(x, y, delay=1.5):
             _click(ctrl, x, y, delay)
@@ -847,3 +874,404 @@ class DailyScheduler(CustomAction):
                 click(1213, 33, delay=3.0)
 
         return _hit(context, shot(), "日常_主界面确认") is not None
+
+
+def _ensure_main_screen(context, ctrl):
+    """模块级主界面保障（各 agent 共用）：游戏启动 + 返回位 + 家园兜底"""
+    for attempt in range(3):
+        img = _shot(ctrl)
+        main_ui = _hit(context, img, "日常_主界面确认")
+        if main_ui is not None and main_ui.hit:
+            return True
+
+        try:
+            context.run_action("游戏启动")
+            time.sleep(3)
+        except Exception as e:
+            _log(f"游戏启动异常: {e}")
+
+        img = _shot(ctrl)
+        notice = _hit(context, img, "启动_公告面板关闭")
+        if notice is not None and notice.hit:
+            _click(ctrl, 1128, 92, 2.0)
+            continue
+
+        for _ in range(4):
+            img = _shot(ctrl)
+            main_ui = _hit(context, img, "日常_主界面确认")
+            if main_ui is not None and main_ui.hit:
+                return True
+            _click(ctrl, *BACK_POS, 1.5)
+
+        home = _hit(context, _shot(ctrl), "乐园_家园图标")
+        if home is not None and home.hit:
+            c = _box_center(home)
+            _click(ctrl, *c, 3.0)
+        else:
+            _click(ctrl, 1213, 33, 3.0)
+
+    return _hit(context, _shot(ctrl), "日常_主界面确认") is not None
+
+
+# ---------- 剧情推图循环（困难/剧情模式推图 agent） ----------
+
+STORY_FARM_ROUNDS = 40      # 地图页轮次上限（防意外死循环）
+BATTLE_ROUNDS_LIMIT = 70    # 单关战斗内轮次上限（5s/轮 ≈ 6 分钟，300 秒限时+余量）
+MODE_BUTTON_ROI = [1060, 95, 220, 60]
+
+
+def _stars_gold(context, img, box):
+    """判断地图关卡节点是否为金色三星（已通关）：采样关卡号下方星星区金色占比"""
+    try:
+        x, y, w, h = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+        y0 = y + h - 5
+        x0 = max(0, x - 15)
+        x1 = min(img.shape[1], x + w + 15)
+        y1 = min(img.shape[0], y0 + 55)
+        region = img[y0:y1, x0:x1]
+        if region.size == 0:
+            return False
+        mask = (region[:, :, 0] > 190) & (region[:, :, 1] > 140) & (region[:, :, 2] < 140)
+        return float(mask.mean()) > 0.08
+    except Exception:
+        return False
+
+
+@AgentServer.custom_action("剧情推图循环")
+class StoryFarmAgent(CustomAction):
+    """剧情推图全流程 agent：
+    主界面 → 作战中心 → 剧情 → 章节卡片（当前进度卷）→ 确认/切换难度模式
+    → 地图推图循环：OCR 关卡号定位节点 → 星色判断（金三星已通跳过、黑星未通开打）
+      → 详情扫荡判断双保险 → 作战准备 → 编队 → 出击 → 战斗（结算/弹窗/倍速）→ 回地图
+    → 全部通关/锁定/体力不足 → 左下宝箱领取 → 返回主界面。
+    模式与关数由 param（mode/max_stages）控制，清日常任务经 interface option 传入。
+    """
+
+    def run(self, context, argv) -> bool:
+        param = {}
+        try:
+            param = json.loads(argv.custom_action_param or "{}")
+        except Exception:
+            pass
+        mode = param.get("mode", "hard")          # story / hard / hell
+        max_stages = int(param.get("max_stages", 3))
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        # 1. 主界面保障 → 作战中心 → 剧情（章节列表）
+        if not _ensure_main_screen(context, ctrl):
+            return False
+        try:
+            context.run_action("剧情_从主界面进入")
+            time.sleep(2)
+        except Exception as e:
+            _log(f"进作战中心异常: {e}")
+            return False
+
+        # 2. 章节卡片遍历：OCR 居中卡片星数，找目标模式未满星的章节点击进入
+        if not self._find_and_enter_volume(context, ctrl, mode):
+            _log(f"未找到 {mode} 模式未满星的章节")
+            return False
+
+        # 3. 难度模式确认/切换
+        if not self._switch_mode(context, ctrl, mode):
+            _log(f"切换到 {mode} 模式失败")
+            return False
+
+        # 4. 推图循环
+        stages_done = 0
+        map_rounds = 0
+        while stages_done < max_stages and map_rounds < STORY_FARM_ROUNDS:
+            map_rounds += 1
+            img = shot()
+            if img is None:
+                time.sleep(2.0)
+                continue
+
+            # 通用瞬态处理（结算/弹窗/跳过/战斗中）
+            handled = self._handle_transient(context, ctrl, img)
+            if handled:
+                continue
+
+            # 非地图页（未知界面）→ 逃跑恢复
+            map_page = _hit(context, img, "推图_地图标题")
+            if map_page is None or not map_page.hit:
+                _log("未知界面，尝试回主界面重导航")
+                if not _ensure_main_screen(context, ctrl):
+                    return False
+                try:
+                    context.run_action("剧情_从主界面进入")
+                    time.sleep(2)
+                    context.run_action("剧情_选章节卡片")
+                    time.sleep(2)
+                    if not self._switch_mode(context, ctrl, mode):
+                        return False
+                except Exception as e:
+                    _log(f"重导航异常: {e}")
+                continue
+
+            # 地图页：OCR 关卡号节点（从左到右）
+            nodes = _hit(context, img, "推图_关卡号")
+            all_nodes = []
+            if nodes is not None:
+                all_results = getattr(nodes, "all_results", None) or []
+                for r in all_results:
+                    b = getattr(r, "box", None)
+                    if b and b[2] > 0:
+                        all_nodes.append({"box": list(b), "text": getattr(r, "text", "")})
+            all_nodes.sort(key=lambda d: d["box"][0])
+
+            target = None
+            for nd in all_nodes:
+                if not _stars_gold(context, img, nd["box"]):
+                    target = nd
+                    break
+
+            if target is None:
+                _log("可见关卡全部通关，尝试滚动地图")
+                ctrl.post_swipe(1000, 400, 400, 400, 500).wait()
+                time.sleep(2.0)
+                rolled = _hit(context, _shot(ctrl), "推图_关卡号")
+                rolled_nodes = getattr(rolled, "all_results", None) or [] if rolled else []
+                still = [r for r in rolled_nodes if not _stars_gold(context, _shot(ctrl), list(r.box))]
+                if not still:
+                    _log("本卷推图完成，领取宝箱后返回")
+                    return self._finish(context, ctrl)
+
+            # 点目标节点（关卡号上方节点图标）
+            bx = target["box"]
+            node_x, node_y = int(bx[0] + bx[2] / 2), int(bx[1] - 45)
+            _log(f"点击关卡节点 {target['text']} @ ({node_x},{node_y})")
+            click(node_x, node_y, 2.0)
+
+            # 详情弹窗（作战准备出现 = 可打；未出现 = 锁定节点）
+            img = shot()
+            prep = _hit(context, img, "剧情_作战准备")
+            if prep is None or not prep.hit:
+                _log("节点无详情（锁定或不可打），尝试宝箱后返回")
+                return self._finish(context, ctrl)
+
+            # 扫荡按钮颜色双保险：灰 = 未通（可打）；亮粉 = 已通（跳过）
+            sweep_bright = self._sweep_bright(img)
+            if sweep_bright:
+                _log("详情显示已通关（扫荡可亮），跳过该节点")
+                click(1022, 155, 2.0)  # X 关详情
+                continue
+
+            # 作战准备 → 编队 → 出击 → 战斗 → 回地图
+            click(975, 558, 4.0)
+            battle_ok = self._battle_until_map(context, ctrl, max_rounds=BATTLE_ROUNDS_LIMIT)
+            if battle_ok is None:
+                return False  # 致命异常
+            stages_done += 1
+            _log(f"第 {stages_done} 关流程完成")
+
+            # 体力不足提前结束
+            img = shot()
+            stam = _ocr_int(context, img, "推图_体力")
+            if 0 <= stam < 12:
+                _log(f"体力不足（{stam}/132 < 12），停止推图")
+                return self._finish(context, ctrl)
+
+        _log(f"推图关数达到上限（{max_stages}），收尾返回")
+        return self._finish(context, ctrl)
+
+    # ---- 章节卡片遍历：OCR 居中卡片星数，找目标模式未满星章节并点击进入 ----
+
+    def _find_and_enter_volume(self, context, ctrl, mode):
+        mode_key = {"story": "剧情", "hard": "困难", "hell": "地狱"}.get(mode, "困难")
+
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        for scroll in range(8):
+            img = shot()
+            card = _hit(context, img, "推图_章节星数")
+            card_text = getattr(card, "text", "") if card is not None else ""
+            if card is not None and card.hit:
+                modes = self._parse_card_modes(card_text)
+                _log(f"章节卡片识别: {modes}（目标 {mode_key}）")
+                if modes.get(mode_key) is True:
+                    _log(f"找到 {mode_key} 未满星的章节，点击进入")
+                    click(690, 360, 5.0)
+                    # 确认进了副本页
+                    for _ in range(3):
+                        img = shot()
+                        if _hit(context, img, "推图_地图标题") is not None and _hit(context, img, "推图_地图标题").hit:
+                            return True
+                        time.sleep(1.5)
+                    return False
+            # 当前卷不满足 → 滑动看相邻卷（交替左右，覆盖列表两端）
+            if scroll % 2 == 0:
+                ctrl.post_swipe(1000, 360, 300, 360, 500).wait()   # 左滑：显示右侧（更新）卷
+            else:
+                ctrl.post_swipe(300, 360, 1000, 360, 500).wait()   # 右滑：显示左侧（更早）卷
+            time.sleep(2.0)
+        _log("遍历章节后未找到目标模式未满星的卷")
+        return False
+
+    def _parse_card_modes(self, text):
+        """解析章节卡片文本「剧情 34/99 困难 0/75 地狱 0/45」→ {剧情: True(未满), ...}"""
+        result = {}
+        if not text:
+            return result
+        for key in ("剧情", "困难", "地狱"):
+            m = re.search(key + r"\s*(\d+)\s*/\s*(\d+)", text)
+            if m:
+                result[key] = int(m.group(1)) < int(m.group(2))
+        return result
+
+    def _switch_mode(self, context, ctrl, mode):
+        """确认副本页右上角当前模式，不符则经下拉菜单切换"""
+        target_text = {"story": "剧情模式", "hard": "困难模式", "hell": "地狱模式"}.get(mode, "困难模式")
+
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        for attempt in range(3):
+            img = shot()
+            cur = _hit(context, img, "推图_模式按钮")
+            cur_text = getattr(cur, "text", "") if cur is not None else ""
+            if target_text in cur_text:
+                _log(f"已在 {mode} 模式")
+                return True
+            # 点按钮弹菜单，再点目标项
+            click(1145, 115, 2.0)
+            menu_item = _hit(context, shot(), f"推图_{target_text}菜单")
+            if menu_item is not None and menu_item.hit:
+                c = _box_center(menu_item)
+                click(*c, 3.0)
+                # 切换后确认
+                img = shot()
+                cur = _hit(context, img, "推图_模式按钮")
+                cur_text = getattr(cur, "text", "") if cur is not None else ""
+                if target_text in cur_text:
+                    return True
+        _log(f"模式切换失败（目标 {target_text}）")
+        return False
+
+    # ---- 瞬态界面处理（结算/玩家信息/跳过/战斗中） ----
+
+    def _handle_transient(self, context, ctrl, img):
+        """处理战斗/结算瞬态，返回 True 表示已处理（外层 continue）"""
+
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        # 结算页
+        end = _hit(context, img, "剧情_结算继续")
+        if end is not None and end.hit:
+            _log("战斗结束，推进结算")
+            click(1150, 710, 4.0)
+            click(1150, 710, 4.0)
+            return True
+
+        # 玩家信息弹窗
+        pi = _hit(context, img, "剧情_玩家信息取消")
+        if pi is not None and pi.hit:
+            click(858, 538, 2.0)
+            return True
+
+        # 战斗前对话跳过
+        skip = _hit(context, img, "剧情_战斗前对话跳过")
+        if skip is not None and skip.hit:
+            c = _box_center(skip)
+            click(*c, 1.5)
+            return True
+
+        # 战斗中（自动按钮可见）→ 等待
+        battle = _hit(context, img, "剧情_战斗中待机")
+        if battle is not None and battle.hit:
+            time.sleep(5.0)
+            return True
+
+        return False
+
+    # ---- 扫荡按钮颜色（粉=已通可扫，灰=未通） ----
+
+    def _sweep_bright(self, img):
+        try:
+            region = img[545:600, 855:1015]
+            if region.size == 0:
+                return False
+            mask = (region[:, :, 0] > 200) & (region[:, :, 1] < 150) & (region[:, :, 2] < 180)
+            return float(mask.mean()) > 0.10
+        except Exception:
+            return False
+
+    # ---- 战斗循环：等待战斗结束回到地图页 ----
+
+    def _battle_until_map(self, context, ctrl, max_rounds=70):
+        """出击后的战斗等待循环。返回：True=已回地图页；False=超时异常；None=致命"""
+
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        battle_rounds = 0
+        while battle_rounds < max_rounds:
+            battle_rounds += 1
+            img = shot()
+            if img is None:
+                time.sleep(2.0)
+                continue
+
+            # 回到地图页 → 完成
+            if _hit(context, img, "推图_地图标题") is not None and _hit(context, img, "推图_地图标题").hit:
+                _log("已回到地图页")
+                return True
+
+            # 通用瞬态
+            if self._handle_transient(context, ctrl, img):
+                continue
+
+            time.sleep(5.0)
+
+        _log("战斗等待超时")
+        return None
+
+    # ---- 收尾：左下宝箱 + 返回主界面 ----
+
+    def _finish(self, context, ctrl):
+        def click(x, y, delay=1.5):
+            _click(ctrl, x, y, delay)
+
+        def shot():
+            return _shot(ctrl)
+
+        # 确保在地图页
+        if _hit(context, shot(), "推图_地图标题") is None:
+            if not _ensure_main_screen(context, ctrl):
+                return False
+
+        # 左下宝箱（星数达标领取，无奖励时点击无反应）
+        click(60, 690, 3.0)
+        # 获得物品/确认弹窗关闭
+        for _ in range(3):
+            img = shot()
+            got = _hit(context, img, "乐园_获得物品弹窗")
+            if got is not None and got.hit:
+                click(55, 35, 2.0)
+            else:
+                break
+            time.sleep(1.0)
+        # 回主界面
+        if not _ensure_main_screen(context, ctrl):
+            return False
+        _log("剧情推图收尾完成")
+        return True

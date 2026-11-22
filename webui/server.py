@@ -38,6 +38,34 @@ DEFAULT_DAILY_ORDER = [
 ]
 
 
+def read_park_config():
+    cfg = {"mode": "hard", "max_stages": 3}
+    try:
+        with open(DAILY_CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        cfg["mode"] = data.get("park_mode", "hard")
+        cfg["max_stages"] = max(1, min(30, int(data.get("park_max_stages", 3))))
+    except Exception:
+        pass
+    return cfg
+
+
+def write_park_config(mode, max_stages):
+    cfg = {"park_mode": mode if mode in ("story", "hard", "hell") else "hard",
+           "park_max_stages": max(1, min(30, int(max_stages)))}
+    os.makedirs(os.path.dirname(DAILY_CONFIG_PATH), exist_ok=True)
+    existing = {}
+    try:
+        with open(DAILY_CONFIG_PATH, "r", encoding="utf-8") as f:
+            existing = json.load(f)
+    except Exception:
+        pass
+    existing.update(cfg)
+    with open(DAILY_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=4)
+    return {"mode": cfg["park_mode"], "max_stages": cfg["park_max_stages"]}
+
+
 def read_daily_order():
     try:
         with open(DAILY_CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -140,6 +168,7 @@ class Handler(BaseHTTPRequestHandler):
             cfg = read_config()
             cfg["_slot_options"] = [name for _, name in SLOT_OPTIONS]
             cfg["arena"] = read_arena_config()
+            cfg["park"] = read_park_config()
             cfg["daily_order"] = read_daily_order()
             self._send(200, json.dumps(cfg, ensure_ascii=False))
         elif path == "/api/log":
@@ -161,6 +190,9 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/arena":
                 cfg = write_arena_battles(body.get("battles_per_day", 5))
                 self._send(200, json.dumps({"ok": True, "arena": cfg}, ensure_ascii=False))
+            elif path == "/api/park":
+                cfg = write_park_config(body.get("mode", "hard"), body.get("max_stages", 3))
+                self._send(200, json.dumps({"ok": True, "park": cfg}, ensure_ascii=False))
             elif path == "/api/daily":
                 order = [s for s in body.get("order", []) if s in DEFAULT_DAILY_ORDER]
                 write_daily_order(order)

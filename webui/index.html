@@ -109,6 +109,31 @@
 </div>
 
 <div class="card">
+  <h2>剧情推图 · 模式与关数</h2>
+  <div class="desc">
+    清日常执行到「剧情推图」时自动进入当前进度章节推图。<br>
+    <b>模式</b>：剧情（主线）/ 困难 / 地狱；<b>关数</b>：本次最多推几关（自动战斗打不过的关卡会失败跳过）。
+  </div>
+  <div class="slot-row">
+    <div class="label">推图模式</div>
+    <div class="slot-opts" id="opts-parkmode">
+      <div class="slot-opt" data-v="story">剧情</div>
+      <div class="slot-opt" data-v="hard">困难</div>
+      <div class="slot-opt" data-v="hell">地狱</div>
+    </div>
+  </div>
+  <div class="slot-row">
+    <div class="label">本次最多推几关</div>
+    <div class="slot-opts">
+      <input id="park-max-stages" type="number" min="1" max="30" value="3"
+        style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-family:inherit">
+      <button class="ghost" style="flex:0 0 auto" onclick="savePark()">保存</button>
+    </div>
+  </div>
+  <div class="actions"><span id="park-msg" style="font-size:13px;color:var(--ok)"></span></div>
+</div>
+
+<div class="card">
   <h2>竞技场 · 每日战斗场数</h2>
   <div class="desc">
     设置「青铜战场」每日自动匹配的场数。<b>填 0 = 不打竞技场</b>（任务会跳过）。<br>
@@ -171,10 +196,44 @@ async function loadConfig() {
     document.getElementById("arena-status").textContent =
       `今日已打 ${data.arena.done_today} 场（跨天自动重置）`;
   }
+  if (data.park) {
+    parkMode = data.park.mode || "hard";
+    document.getElementById("park-max-stages").value = data.park.max_stages || 3;
+    renderParkMode();
+  }
   if (data.daily_order && data.daily_order.length) {
     dailyOrder = data.daily_order;
     renderOrder();
   }
+}
+
+let parkMode = "hard";
+
+function renderParkMode() {
+  document.querySelectorAll("#opts-parkmode .slot-opt").forEach(d => {
+    d.className = "slot-opt" + (d.dataset.v === parkMode ? " on" : "");
+    d.onclick = () => { parkMode = d.dataset.v; renderParkMode(); };
+  });
+}
+
+async function savePark() {
+  const v = parseInt(document.getElementById("park-max-stages").value, 10);
+  if (isNaN(v) || v < 1 || v > 30) {
+    const st = document.getElementById("park-msg");
+    st.textContent = "✗ 关数请填 1~30";
+    st.style.color = "#ff6b6b";
+    return;
+  }
+  const r = await fetch("/api/park", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: parkMode, max_stages: v })
+  });
+  const data = await r.json();
+  const st = document.getElementById("park-msg");
+  st.textContent = data.ok ? `✓ 已保存：${data.park.mode} 模式，最多 ${data.park.max_stages} 关` : "✗ 保存失败";
+  st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
+  setTimeout(() => st.textContent = "", 4000);
 }
 
 async function saveArena() {

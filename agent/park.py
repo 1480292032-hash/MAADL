@@ -585,7 +585,11 @@ class ArenaFight(CustomAction):
                 if (end_page is not None and end_page.hit) or (cont_btn is not None and cont_btn.hit):
                     _log("战斗结束，点屏幕推进结算")
                     click(1150, 710, delay=4.0)
-                    click(1150, 710, delay=4.0)
+                    # 第二下前确认是否已回竞技场：匹配按钮与结算点击位重叠
+                    # (匹配 box 1106-1202,664-714 含 1150,710)，盲点第二下会误开下一场
+                    img2 = shot()
+                    if img2 is None or _hit(context, img2, "竞技场_界面标题") is None                             or not _hit(context, img2, "竞技场_界面标题").hit:
+                        click(1150, 710, delay=4.0)
                     break
 
                 # 战斗进行中：首轮点两次「自动」切 2 倍速
@@ -772,6 +776,7 @@ DAILY_STEPS = {
     "邮件": "子流程_邮件",
     "联络": "子流程_联络",
     "社团": "子流程_社团",
+    "研发中心": "子流程_研发中心",
     "次元入侵": "子流程_次元入侵",
     "追猎计划": "子流程_追猎计划",
     "特训矩阵": "子流程_特训矩阵",
@@ -1210,31 +1215,92 @@ class StoryFarmAgent(CustomAction):
         def shot():
             return _shot(ctrl)
 
-        for scroll in range(8):
-            img = shot()
-            card = _hit(context, img, "推图_章节星数")
-            card_text = getattr(card, "text", "") if card is not None else ""
-            if card is not None and card.hit:
-                modes = self._parse_card_modes(card_text)
-                _log(f"章节卡片识别: {modes}（目标 {mode_key}）")
-                if modes.get(mode_key) is True:
-                    _log(f"找到 {mode_key} 未满星的章节，点击进入")
-                    click(690, 360, 5.0)
-                    # 确认进了副本页
-                    for _ in range(3):
-                        img = shot()
-                        if _hit(context, img, "推图_地图标题") is not None and _hit(context, img, "推图_地图标题").hit:
-                            return True
-                        time.sleep(1.5)
-                    return False
-            # 当前卷不满足 → 滑动看相邻卷（交替左右，覆盖列表两端）
-            if scroll % 2 == 0:
-                ctrl.post_swipe(1000, 360, 300, 360, 500).wait()   # 左滑：显示右侧（更新）卷
-            else:
-                ctrl.post_swipe(300, 360, 1000, 360, 500).wait()   # 右滑：显示左侧（更早）卷
-            time.sleep(2.0)
+        # 遍历策略（实测 11-26 定版）：滑动手势在 Cocos 列表上小步滑动
+        # 会被吞（每次大滑又跳 2-3 卷），改用「点击左右邻卡」逐卷精准滚动：
+        # 先向左扫到列表头（连续同一星数/读不到→到头），再向右扫全网。
+        # 未解锁卷显示"关卡X-Y通关解锁"无星数，点侧卡同样能把它滚到居中。
+        for dir_x in (440, 940):   # 440=左邻卡片点击点（往回扫），940=右邻（往后扫）
+            stale = 0
+            for step in range(18):
+                img = shot()
+                if img is None:
+                    time.sleep(2.0)
+                    continue
+                # 星数读最多 3 次取并集（OCR 偶发漏读行名/数字）
+                modes = {}
+                for _try in range(3):
+                    card = _hit(context, img, "推图_章节星数")
+                    if card is not None and card.hit:
+                        modes.update(self._parse_modes_boxes(getattr(card, "all_results", None)))
+                    if mode_key in modes:
+                        break
+                    img = shot()
+                if modes:
+                    _log(f"章节卡片识别: {modes}（目标 {mode_key}）")
+                    if modes.get(mode_key) is True:
+                        _log(f"找到 {mode_key} 未满星的章节，点击进入")
+                        click(690, 360, 5.0)
+                        for _ in range(3):
+                            img = shot()
+                            if _hit(context, img, "推图_地图标题") is not None and _hit(context, img, "推图_地图标题").hit:
+                                return True
+                            time.sleep(1.5)
+                        return False
+                else:
+                    _log("当前卷无星数（未解锁）")
+                # 点击邻卡滚动 + 用「卷X」标题文本变化检测是否真的滚动
+                # （未解锁卷画面高度相似，像素均值差易误判；标题每卷必不同）
+                title0 = self._title_text(context, img)
+                click(dir_x, 360, 2.5)
+                img2 = shot()
+                if img2 is None:
+                    continue
+                title1 = self._title_text(context, img2)
+                if title0 and title1 and title0 == title1:
+                    stale += 1
+                    _log(f"点击邻卡未滚动（标题仍是 {title1}，第 {stale} 次）")
+                    if stale >= 2:
+                        _log("该方向已到头")
+                        break
+                else:
+                    stale = 0
         _log("遍历章节后未找到目标模式未满星的卷")
         return False
+
+    def _title_text(self, context, img):
+        """读居中的章节卡片标题（「卷X·名称」），用于检测列表滚动是否生效"""
+        d = _hit(context, img, "推图_章节标题")
+        if d is not None and d.hit:
+            return getattr(d, "text", "") or ""
+        return ""
+
+    def _parse_modes_boxes(self, all_results):
+        """按 OCR box 的 y 坐标把「剧情/困难/地狱」行名与「N/M」数字就近配对。
+        实测 OCR 输出示例：{text:"★刷情",box:[631,426,88,32]}（replace 后为剧情）、
+        {text:"困难"}, {text:"地狱"}, {text:"21/21"}, {text:"30/30"}, {text:"18/18"}。
+        返回 {剧情: True(未满), 困难: ..., 地狱: ...}（数字行缺失的键不出现）"""
+        labels = {}
+        values = []
+        for r in (all_results or []):
+            t = getattr(r, "text", "") or ""
+            b = getattr(r, "box", None)
+            if not b:
+                continue
+            cy = b[1] + b[3] / 2.0
+            for key in ("剧情", "困难", "地狱"):
+                if key in t:
+                    labels[key] = cy
+            m = re.search(r"(\d+)\s*/\s*(\d+)", t)
+            if m:
+                values.append((cy, int(m.group(1)), int(m.group(2))))
+        result = {}
+        for key, ly in labels.items():
+            if not values:
+                continue
+            near = min(values, key=lambda v: abs(v[0] - ly))
+            if abs(near[0] - ly) < 60:   # 同一行的数字应在行名下方/同高附近
+                result[key] = near[1] < near[2]
+        return result
 
     def _parse_card_modes(self, text):
         """解析章节卡片文本「剧情 34/99 困难 0/75 地狱 0/45」→ {剧情: True(未满), ...}"""

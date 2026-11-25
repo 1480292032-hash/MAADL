@@ -1029,9 +1029,9 @@ def _navigate_activity(context, ctrl, card_entry, card_name, partial_names=None)
                 continue
         _log(f"{card_name} 不在可见区（attempt {attempt}），滑动")
         if attempt % 2 == 0:
-            ctrl.post_swipe(1000, 360, 300, 360, 500).wait()   # 左滑看右侧
+            ctrl.post_swipe(1000, 360, 300, 360, 800).wait()   # 左滑看右侧
         else:
-            ctrl.post_swipe(300, 360, 1000, 360, 500).wait()   # 右滑看左侧
+            ctrl.post_swipe(300, 360, 1000, 360, 800).wait()   # 右滑看左侧
         time.sleep(2.0)
     return False
 
@@ -1521,7 +1521,9 @@ class DailyDungeon(CustomAction):
         return -1
 
     def _locate_stage(self, context, ctrl, stage_name):
-        """作战中心副本横向列表：OCR 副本名定位并点击卡片（含滑动遍历）"""
+        """作战中心副本横向列表：OCR 副本名定位并点击卡片（含滑动遍历）。
+        交互规律与活动页签一致：点非居中卡片只滚动居中，点居中卡片才进入。
+        """
 
         def click(x, y, delay=2.0):
             _click(ctrl, x, y, delay)
@@ -1529,7 +1531,7 @@ class DailyDungeon(CustomAction):
         def shot():
             return _shot(ctrl)
 
-        for attempt in range(6):
+        for attempt in range(8):
             img = shot()
             if img is None:
                 time.sleep(2.0)
@@ -1539,20 +1541,29 @@ class DailyDungeon(CustomAction):
             })
             if card is not None and card.hit:
                 c = _box_center(card)
-                _log(f"找到副本卡片 {stage_name} @ ({c[0]},{c[1]})")
-                click(*c, 2.0)
-                # 确认进入级别节点图
-                for _ in range(3):
-                    img = shot()
-                    t = _hit(context, img, "副本_级别图标题")
-                    if t is not None and t.hit:
-                        _log("已进入级别节点图")
-                        return True
-                    time.sleep(1.5)
-                return False
-            # 未命中 → 滑动副本列表（左滑看右侧）
+                if 540 <= c[0] <= 850:
+                    # 居中 → 点击进入
+                    _log(f"找到居中副本卡片 {stage_name} @ ({c[0]},{c[1]})，点击进入")
+                    click(*c, 2.5)
+                    for _ in range(3):
+                        img = shot()
+                        t = _hit(context, img, "副本_级别图标题")
+                        if t is not None and t.hit:
+                            _log("已进入级别节点图")
+                            return True
+                        time.sleep(1.5)
+                    return False
+                # 侧边可见 → 点击使其居中后重扫
+                _log(f"副本卡片 {stage_name} 不在居中（x={c[0]}），点击使其居中")
+                click(*c, 2.8)
+                time.sleep(2.5)
+                continue
+            # 未命中 → 滑动副本列表（双向交替，800ms 拖拽才能稳定滚动）
             _log(f"副本 {stage_name} 未在可见区（attempt {attempt}），滑动列表")
-            ctrl.post_swipe(1000, 360, 300, 360, 500).wait()
+            if attempt % 2 == 0:
+                ctrl.post_swipe(1000, 360, 300, 360, 800).wait()
+            else:
+                ctrl.post_swipe(300, 360, 1000, 360, 800).wait()
             time.sleep(2.0)
         return False
 
@@ -1647,7 +1658,6 @@ class SpiritTrial(CustomAction):
         time.sleep(2)
 
         wins = 0
-        claimed = False
         rounds = 0
         while rounds < 15:
             rounds += 1
@@ -1671,26 +1681,8 @@ class SpiritTrial(CustomAction):
                     break
                 continue
 
-            # 3 胜礼盒发光 → 领挑战奖励
-            gift = _hit(context, img, "精灵试炼_礼盒")
-            if gift is not None and gift.hit:
-                if not claimed:
-                    _log("3 胜完成，领挑战奖励")
-                    _click(ctrl, 95, 605, 4.0)
-                    claimed = True
-                    for _ in range(6):
-                        time.sleep(2.0)
-                        img = _shot(ctrl)
-                        g = _hit(context, img, "世界之眼_获得物品关闭")
-                        if g is not None and g.hit:
-                            _log("挑战奖励已领取")
-                            _click(ctrl, 55, 35, 2.0)
-                            break
-                    continue
-                _log("挑战奖励已领取，精灵试炼完成")
-                break
-
-            # 进入准备 → 出击 → 战斗
+            # 优先战斗：进入准备 → 出击。
+            # （礼盒在已领取后仍发光，旧逻辑先查礼盒会误判"3胜完成"跳过战斗）
             prep = _hit(context, img, "精灵试炼_进入准备")
             if prep is not None and prep.hit:
                 c = _box_center(prep)
@@ -1715,7 +1707,8 @@ class SpiritTrial(CustomAction):
                         break
                     time.sleep(1.5)
                 if not at_prep:
-                    _log("未出现出击按钮（今日已完成？），结束")
+                    _log("进入准备未到作战准备页（今日对手已打完），战斗结束")
+                    _click(ctrl, *BACK_POS, 2.0)
                     break
                 ok = self._battle_one(context, ctrl)
                 if ok is None:
@@ -1727,6 +1720,41 @@ class SpiritTrial(CustomAction):
                 continue
 
             time.sleep(3.0)
+
+        # 领奖阶段（战斗全部结束后）：确保在精灵试炼页 → 礼盒发光则领取
+        # （战斗循环 break 前可能已点返回位退出页面，需重新导航进入）
+        img = _shot(ctrl)
+        in_page = False
+        if img is not None:
+            t = _hit(context, img, "精灵试炼_页标题")
+            in_page = t is not None and t.hit
+        if not in_page:
+            _log("领奖前重新进入精灵试炼页")
+            if _navigate_activity(context, ctrl, "活动_精灵试炼卡片", "精灵试炼", partial_names=["精灵"]):
+                time.sleep(4)   # 进页后立绘/礼盒加载需要时间
+                in_page = True
+        if in_page:
+            # 礼盒有呼吸发光动画，重试几次等到可匹配的帧
+            gift = None
+            for _ in range(5):
+                img = _shot(ctrl)
+                if img is not None:
+                    gift = _hit(context, img, "精灵试炼_礼盒")
+                    if gift is not None and gift.hit:
+                        break
+                time.sleep(1.5)
+            if gift is not None and gift.hit:
+                gc = _box_center(gift)
+                _log(f"点击礼盒领挑战奖励 @ ({gc[0]},{gc[1]})")
+                _click(ctrl, *gc, 4.0)
+                for _ in range(5):
+                    time.sleep(2.0)
+                    img = _shot(ctrl)
+                    g = _hit(context, img, "世界之眼_获得物品关闭")
+                    if g is not None and g.hit:
+                        _log("挑战奖励已领取")
+                        _click(ctrl, 55, 35, 2.0)
+                        break
 
         _ensure_main_screen(context, ctrl)
         _log(f"精灵试炼结束（胜 {wins} 场）")

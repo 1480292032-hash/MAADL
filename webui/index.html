@@ -123,6 +123,14 @@
     </div>
   </div>
   <div class="slot-row">
+    <div class="label">目标卷号</div>
+    <div class="slot-opts">
+      <input id="park-volume" type="number" min="1" max="22" value="6"
+        style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-family:inherit">
+      <span style="font-size:13px;color:var(--muted);align-self:center">要推的章节卷（1~22）</span>
+    </div>
+  </div>
+  <div class="slot-row">
     <div class="label">本次最多推几关</div>
     <div class="slot-opts">
       <input id="park-max-stages" type="number" min="1" max="30" value="3"
@@ -199,6 +207,7 @@ async function loadConfig() {
   if (data.park) {
     parkMode = data.park.mode || "hard";
     document.getElementById("park-max-stages").value = data.park.max_stages || 3;
+    document.getElementById("park-volume").value = data.park.volume || 6;
     renderParkMode();
   }
   if (data.daily_order && data.daily_order.length) {
@@ -224,14 +233,21 @@ async function savePark() {
     st.style.color = "#ff6b6b";
     return;
   }
+  const vol = parseInt(document.getElementById("park-volume").value, 10);
+  if (isNaN(vol) || vol < 1 || vol > 22) {
+    const st = document.getElementById("park-msg");
+    st.textContent = "✗ 卷号请填 1~22";
+    st.style.color = "#ff6b6b";
+    return;
+  }
   const r = await fetch("/api/park", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mode: parkMode, max_stages: v })
+    body: JSON.stringify({ mode: parkMode, max_stages: v, volume: vol })
   });
   const data = await r.json();
   const st = document.getElementById("park-msg");
-  st.textContent = data.ok ? `✓ 已保存：${data.park.mode} 模式，最多 ${data.park.max_stages} 关` : "✗ 保存失败";
+  st.textContent = data.ok ? `✓ 已保存：第 ${data.park.volume} 卷 · ${data.park.mode} 模式，最多 ${data.park.max_stages} 关` : "✗ 保存失败";
   st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
   setTimeout(() => st.textContent = "", 4000);
 }

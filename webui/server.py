@@ -33,8 +33,9 @@ ARENA_DEFAULT = {
 }
 
 DEFAULT_DAILY_ORDER = [
-    "签到", "补给站", "邮件", "联络", "社团", "次元入侵",
-    "追猎计划", "特训矩阵", "竞技场", "世界之眼", "魔女日程",
+    "签到", "补给站", "邮件", "联络", "社团", "研发中心", "次元入侵",
+    "追猎计划", "特训矩阵", "竞技场", "精灵试炼", "世界之眼", "魔女日程",
+    "每日副本", "剧情推图",
 ]
 
 
@@ -45,14 +46,16 @@ def read_park_config():
             data = json.load(f)
         cfg["mode"] = data.get("park_mode", "hard")
         cfg["max_stages"] = max(1, min(30, int(data.get("park_max_stages", 3))))
+        cfg["volume"] = max(1, min(22, int(data.get("story_volume", 6))))
     except Exception:
         pass
     return cfg
 
 
-def write_park_config(mode, max_stages):
+def write_park_config(mode, max_stages, volume=6):
     cfg = {"park_mode": mode if mode in ("story", "hard", "hell") else "hard",
-           "park_max_stages": max(1, min(30, int(max_stages)))}
+           "park_max_stages": max(1, min(30, int(max_stages))),
+           "story_volume": max(1, min(22, int(volume)))}
     os.makedirs(os.path.dirname(DAILY_CONFIG_PATH), exist_ok=True)
     existing = {}
     try:
@@ -63,7 +66,8 @@ def write_park_config(mode, max_stages):
     existing.update(cfg)
     with open(DAILY_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(existing, f, ensure_ascii=False, indent=4)
-    return {"mode": cfg["park_mode"], "max_stages": cfg["park_max_stages"]}
+    return {"mode": cfg["park_mode"], "max_stages": cfg["park_max_stages"],
+            "volume": cfg["story_volume"]}
 
 
 def read_daily_order():
@@ -191,7 +195,8 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = write_arena_battles(body.get("battles_per_day", 5))
                 self._send(200, json.dumps({"ok": True, "arena": cfg}, ensure_ascii=False))
             elif path == "/api/park":
-                cfg = write_park_config(body.get("mode", "hard"), body.get("max_stages", 3))
+                cfg = write_park_config(body.get("mode", "hard"), body.get("max_stages", 3),
+                                        body.get("volume", 6))
                 self._send(200, json.dumps({"ok": True, "park": cfg}, ensure_ascii=False))
             elif path == "/api/daily":
                 order = [s for s in body.get("order", []) if s in DEFAULT_DAILY_ORDER]

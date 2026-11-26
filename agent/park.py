@@ -126,6 +126,18 @@ def _hit(context, image, entry):
         return None
 
 
+def _dtext(detail):
+    """取识别文本：RecognitionDetail 本身没有 text 属性，文本在
+    best_result.text（OCRResult）。11-26 实测发现多处误用 getattr(detail,"text")
+    永远拿空串，导致模式切换/钥匙数读取一直失败。"""
+    if detail is None:
+        return ""
+    br = getattr(detail, "best_result", None)
+    if br is not None:
+        return getattr(br, "text", "") or ""
+    return ""
+
+
 def _box_center(detail):
     if detail is None or not getattr(detail, "hit", False):
         return None
@@ -140,7 +152,7 @@ def _ocr_int(context, image, entry):
     detail = _hit(context, image, entry)
     if detail is None or not getattr(detail, "hit", False):
         return -1
-    text = getattr(detail, "text", "") or ""
+    text = _dtext(detail)
     m = re.search(r"\d+", text)
     return int(m.group()) if m else -1
 
@@ -149,7 +161,7 @@ def _keys(context, image):
     """剩余翻牌次数：优先读右侧「剩余次数 N/1」，备选顶部钥匙图标数字"""
     detail = _hit(context, image, "乐园_剩余次数")
     if detail is not None and getattr(detail, "hit", False):
-        text = getattr(detail, "text", "") or ""
+        text = _dtext(detail)
         m = re.search(r"(\d+)\s*/", text)
         if m:
             return int(m.group(1))
@@ -162,8 +174,10 @@ def _click(ctrl, x, y, delay=1.0):
 
 
 def _shot(ctrl):
-    """模拟器截图：轮询等待完成（最多 15 秒/次，防模拟器截图卡死），重试 3 次"""
-    for _ in range(3):
+    """模拟器截图：轮询等待完成（15 秒/次），重试 3 次。
+    连续失败后重连控制器——MaaFW 截图 job 队列在模拟器卡顿时会堵塞，
+    旧 job 滞留会让后续每次截图都超时（重连重建连接清空队列）。"""
+    for attempt in range(3):
         try:
             job = ctrl.post_screencap()
             for _w in range(15):
@@ -173,7 +187,13 @@ def _shot(ctrl):
                         return img
                     break
                 time.sleep(1.0)
-            _log("截图超时/失败，重试")
+            _log(f"截图超时/失败（第 {attempt + 1} 次）")
+            if attempt >= 1:
+                try:
+                    ctrl.post_connection().wait()
+                    _log("控制器已重连（清截图队列）")
+                except Exception as e2:
+                    _log(f"重连异常: {e2}")
         except Exception as e:
             _log(f"截图异常: {e}")
         time.sleep(1.0)
@@ -518,7 +538,7 @@ class ArenaFight(CustomAction):
             match_btn = _hit(context, img, "竞技场_匹配按钮")
             if match_btn is None or not match_btn.hit:
                 t = _hit(context, img, "竞技场_界面标题")
-                t_text = getattr(t, "text", "") if t else "<识别未启动>"
+                t_text = _dtext(t) if t else "<识别未启动>"
                 t_box = getattr(t, "box", None) if t else None
                 _log(f"竞技场界面未找到匹配按钮（标题识别: {t_text!r} box={t_box}）")
                 click(*BACK_POS, delay=2.0)
@@ -800,6 +820,7 @@ def load_daily_config():
         "order": list(DEFAULT_DAILY_ORDER),
         "park_mode": "hard",
         "park_max_stages": 3,
+        "story_volume": 6,
         "stage_name": "经验大作战",
         "level": "深渊",
         "times": 1,
@@ -812,6 +833,7 @@ def load_daily_config():
             cfg["order"] = order
         cfg["park_mode"] = data.get("park_mode", "hard")
         cfg["park_max_stages"] = max(1, min(30, int(data.get("park_max_stages", 3))))
+        cfg["story_volume"] = max(1, min(22, int(data.get("story_volume", 6))))
         cfg["stage_name"] = str(data.get("stage_name", cfg["stage_name"]))
         cfg["level"] = str(data.get("level", cfg["level"]))
         cfg["times"] = max(1, min(9, int(data.get("times", 1))))
@@ -861,6 +883,7 @@ class DailyScheduler(CustomAction):
                         "custom_action_param": {
                             "mode": dcfg["park_mode"],
                             "max_stages": dcfg["park_max_stages"],
+                            "volume": dcfg["story_volume"],
                         }
                     }
                 }
@@ -1076,6 +1099,11 @@ class StoryFarmAgent(CustomAction):
             pass
         mode = param.get("mode", "hard")          # story / hard / hell
         max_stages = int(param.get("max_stages", 3))
+        volume = param.get("volume")
+        if volume is None:
+            volume = load_daily_config()["story_volume"]
+        volume = max(1, min(22, int(volume)))
+        _log(f"剧情推图：目标第 {volume} 卷 · {mode} 模式 · 最多 {max_stages} 关")
         ctrl = context.tasker.controller
         if ctrl is None:
             return False
@@ -1096,10 +1124,36 @@ class StoryFarmAgent(CustomAction):
             _log(f"进作战中心异常: {e}")
             return False
 
-        # 2. 章节卡片遍历：OCR 居中卡片星数，找目标模式未满星的章节点击进入
-        if not self._find_and_enter_volume(context, ctrl, mode):
-            _log(f"未找到 {mode} 模式未满星的章节")
+        # 2. 作战中心切到「剧情」页签（作战中心会记住上次停留页签）
+        #    确认方式：剧情页签选中态模板（标题 OCR 对艺术字不可靠）
+        at_story = False
+        for _ in range(3):
+            img = shot()
+            d = _hit(context, img, "剧情_页签选中") if img is not None else None
+            if d is not None and d.hit:
+                at_story = True
+                break
+            click(60, 125, 2.5)   # 左栏「剧情」页签
+        if not at_story:
+            _log("未进入剧情页签")
             return False
+        _log("已在作战·剧情页")
+
+        # 3. 按卷号定位（位置计数法）→ 点击居中卡片进入地图
+        if not self._goto_volume(context, ctrl, volume):
+            return False
+        click(690, 360, 5.0)
+        in_map = False
+        for _ in range(3):
+            img = shot()
+            if img is not None and _hit(context, img, "推图_地图标题") is not None                     and _hit(context, img, "推图_地图标题").hit:
+                in_map = True
+                break
+            time.sleep(1.5)
+        if not in_map:
+            _log("点击章节卡片后未进入地图页")
+            return False
+        _log("已进入章节地图")
 
         # 3. 难度模式确认/切换
         if not self._switch_mode(context, ctrl, mode):
@@ -1138,37 +1192,32 @@ class StoryFarmAgent(CustomAction):
                     _log(f"重导航异常: {e}")
                 continue
 
-            # 地图页：OCR 关卡号节点（从左到右）
-            nodes = _hit(context, img, "推图_关卡号")
-            all_nodes = []
-            if nodes is not None:
-                all_results = getattr(nodes, "all_results", None) or []
-                for r in all_results:
-                    b = getattr(r, "box", None)
-                    if b and b[2] > 0:
-                        all_nodes.append({"box": list(b), "text": getattr(r, "text", "")})
-            all_nodes.sort(key=lambda d: d["box"][0])
-
+            # 地图页：黑星模板定位未通关节点（黑星三连=未通关标记；
+            # 金三星=已通关颜色不同不会匹配；filtered 按 Horizontal 从左到右）
             target = None
-            for nd in all_nodes:
-                if not _stars_gold(context, img, nd["box"]):
-                    target = nd
-                    break
+            star = _hit(context, img, "推图_黑星")
+            if star is not None and star.hit:
+                fr = getattr(star, "filtered_results", None) or []
+                if fr:
+                    b = list(fr[0].box)
+                    target = {"box": b, "text": f"黑星@{b[0]},{b[1]}"}
 
             if target is None:
-                _log("可见关卡全部通关，尝试滚动地图")
+                _log("可见区无黑星节点，尝试滚动地图")
                 ctrl.post_swipe(1000, 400, 400, 400, 500).wait()
                 time.sleep(2.0)
-                rolled = _hit(context, _shot(ctrl), "推图_关卡号")
-                rolled_nodes = getattr(rolled, "all_results", None) or [] if rolled else []
-                still = [r for r in rolled_nodes if not _stars_gold(context, _shot(ctrl), list(r.box))]
-                if not still:
-                    _log("本卷推图完成，领取宝箱后返回")
+                img2 = _shot(ctrl)
+                star2 = _hit(context, img2, "推图_黑星") if img2 is not None else None
+                fr2 = getattr(star2, "filtered_results", None) or [] if (star2 is not None and star2.hit) else []
+                if not fr2:
+                    _log("本卷推图完成（无未通关节点），领取宝箱后返回")
                     return self._finish(context, ctrl)
+                b = list(fr2[0].box)
+                target = {"box": b, "text": f"黑星@{b[0]},{b[1]}"}
 
-            # 点目标节点（关卡号上方节点图标）
+            # 点击黑星上方约 80px 的关卡节点图标
             bx = target["box"]
-            node_x, node_y = int(bx[0] + bx[2] / 2), int(bx[1] - 45)
+            node_x, node_y = int(bx[0] + bx[2] / 2), int(bx[1] - 80)
             _log(f"点击关卡节点 {target['text']} @ ({node_x},{node_y})")
             click(node_x, node_y, 2.0)
 
@@ -1206,72 +1255,73 @@ class StoryFarmAgent(CustomAction):
 
     # ---- 章节卡片遍历：OCR 居中卡片星数，找目标模式未满星章节并点击进入 ----
 
-    def _find_and_enter_volume(self, context, ctrl, mode):
-        mode_key = {"story": "剧情", "hard": "困难", "hell": "地狱"}.get(mode, "困难")
-
-        def click(x, y, delay=1.5):
-            _click(ctrl, x, y, delay)
+    def _goto_volume(self, context, ctrl, target):
+        """按卷号定位章节（位置计数法，实测校准 11-26）：
+        列表有序卷1→卷22，点击左/tap 右邻卡片（440/940,360）= 精确滚 1 卷。
+        先连点左邻到列表头（点无效=到头），再向右点 target-1 次。
+        滚动检测：卡片区 48x48 灰度均值图前后绝对差 >5 = 滚动了
+        （实测滚动≈48、静止≤1.4，区分度极高，不依赖标题/星数 OCR 内容）。
+        """
 
         def shot():
             return _shot(ctrl)
 
-        # 遍历策略（实测 11-26 定版）：滑动手势在 Cocos 列表上小步滑动
-        # 会被吞（每次大滑又跳 2-3 卷），改用「点击左右邻卡」逐卷精准滚动：
-        # 先向左扫到列表头（连续同一星数/读不到→到头），再向右扫全网。
-        # 未解锁卷显示"关卡X-Y通关解锁"无星数，点侧卡同样能把它滚到居中。
-        for dir_x in (440, 940):   # 440=左邻卡片点击点（往回扫），940=右邻（往后扫）
-            stale = 0
-            for step in range(18):
-                img = shot()
-                if img is None:
-                    time.sleep(2.0)
-                    continue
-                # 星数读最多 3 次取并集（OCR 偶发漏读行名/数字）
-                modes = {}
-                for _try in range(3):
-                    card = _hit(context, img, "推图_章节星数")
-                    if card is not None and card.hit:
-                        modes.update(self._parse_modes_boxes(getattr(card, "all_results", None)))
-                    if mode_key in modes:
-                        break
-                    img = shot()
-                if modes:
-                    _log(f"章节卡片识别: {modes}（目标 {mode_key}）")
-                    if modes.get(mode_key) is True:
-                        _log(f"找到 {mode_key} 未满星的章节，点击进入")
-                        click(690, 360, 5.0)
-                        for _ in range(3):
-                            img = shot()
-                            if _hit(context, img, "推图_地图标题") is not None and _hit(context, img, "推图_地图标题").hit:
-                                return True
-                            time.sleep(1.5)
-                        return False
-                else:
-                    _log("当前卷无星数（未解锁）")
-                # 点击邻卡滚动 + 用「卷X」标题文本变化检测是否真的滚动
-                # （未解锁卷画面高度相似，像素均值差易误判；标题每卷必不同）
-                title0 = self._title_text(context, img)
-                click(dir_x, 360, 2.5)
-                img2 = shot()
-                if img2 is None:
-                    continue
-                title1 = self._title_text(context, img2)
-                if title0 and title1 and title0 == title1:
-                    stale += 1
-                    _log(f"点击邻卡未滚动（标题仍是 {title1}，第 {stale} 次）")
-                    if stale >= 2:
-                        _log("该方向已到头")
-                        break
-                else:
-                    stale = 0
-        _log("遍历章节后未找到目标模式未满星的卷")
-        return False
+        def sig(img):
+            import numpy as _np
+            a = img[160:620, 340:1040, :3].astype("float32").mean(axis=2)
+            h, w = a.shape
+            ys = _np.linspace(0, h - 1, 48).astype(int)
+            xs = _np.linspace(0, w - 1, 48).astype(int)
+            return a[_np.ix_(ys, xs)]
+
+        def moved(img_a, img_b):
+            import numpy as _np
+            return float(_np.abs(sig(img_b) - sig(img_a)).mean()) > 5.0
+
+        # 阶段1：连点左邻 → 列表头（卷1）
+        stale = 0
+        for _ in range(28):
+            img = shot()
+            if img is None:
+                time.sleep(2.0)
+                continue
+            _click(ctrl, 440, 360, 1.8)
+            img2 = shot()
+            if img2 is None:
+                continue
+            if moved(img, img2):
+                stale = 0
+            else:
+                stale += 1
+                if stale >= 2:
+                    break
+        _log("章节列表已到最左端（卷1）")
+
+        # 阶段2：向右移动 target-1 卷
+        reached = 0
+        for _ in range(max(0, target - 1)):
+            img = shot()
+            if img is None:
+                time.sleep(2.0)
+                continue
+            _click(ctrl, 940, 360, 1.8)
+            img2 = shot()
+            if img2 is None:
+                continue
+            if moved(img, img2):
+                reached += 1
+            else:
+                _log(f"向右第 {reached + 1} 步到头（目标第 {target} 卷超出已开放范围，"
+                     f"最多到第 {reached + 1} 卷）")
+                return False
+        _log(f"已定位到第 {target} 卷（共向右移动 {reached} 步）")
+        return True
 
     def _title_text(self, context, img):
         """读居中的章节卡片标题（「卷X·名称」），用于检测列表滚动是否生效"""
         d = _hit(context, img, "推图_章节标题")
         if d is not None and d.hit:
-            return getattr(d, "text", "") or ""
+            return _dtext(d)
         return ""
 
     def _parse_modes_boxes(self, all_results):
@@ -1323,26 +1373,36 @@ class StoryFarmAgent(CustomAction):
         def shot():
             return _shot(ctrl)
 
-        for attempt in range(3):
+        # 进图瞬间标题区未渲染，先等模式按钮文字出现（最多 12 秒）
+        cur_text = ""
+        for _wait in range(8):
             img = shot()
             cur = _hit(context, img, "推图_模式按钮")
-            cur_text = getattr(cur, "text", "") if cur is not None else ""
-            if target_text in cur_text:
-                _log(f"已在 {mode} 模式")
-                return True
-            # 点按钮弹菜单，再点目标项
-            click(1145, 115, 2.0)
+            cur_text = _dtext(cur) if cur is not None else ""
+            if cur_text:
+                break
+            time.sleep(1.5)
+        if target_text in cur_text:
+            _log(f"已在 {mode} 模式")
+            return True
+
+        for attempt in range(4):
+            click(1145, 115, 2.0)   # 点右上模式按钮弹下拉菜单
             menu_item = _hit(context, shot(), f"推图_{target_text}菜单")
             if menu_item is not None and menu_item.hit:
                 c = _box_center(menu_item)
                 click(*c, 3.0)
-                # 切换后确认
-                img = shot()
-                cur = _hit(context, img, "推图_模式按钮")
-                cur_text = getattr(cur, "text", "") if cur is not None else ""
-                if target_text in cur_text:
-                    return True
-        _log(f"模式切换失败（目标 {target_text}）")
+                # 切换后确认（切换动画期间重试）
+                for _confirm in range(4):
+                    img = shot()
+                    cur = _hit(context, img, "推图_模式按钮")
+                    cur_text = _dtext(cur) if cur is not None else ""
+                    if target_text in cur_text:
+                        _log(f"已切换到 {mode} 模式")
+                        return True
+                    time.sleep(1.5)
+            time.sleep(1.0)
+        _log(f"模式切换失败（目标 {target_text}，当前 {cur_text!r}）")
         return False
 
     # ---- 瞬态界面处理（结算/玩家信息/跳过/战斗中） ----

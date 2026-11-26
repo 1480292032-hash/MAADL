@@ -960,6 +960,17 @@ def _ensure_main_screen(context, ctrl):
         if main_ui is not None and main_ui.hit:
             return True
 
+        # 3.7.4 房间系统（夏拉姆之门）恢复：右上角退出图标命中 → 走退出流程
+        room_exit = _hit(context, img, "夏拉姆之门_退出图标")
+        if room_exit is not None and room_exit.hit:
+            _log("检测到夏拉姆之门房间，走退出流程")
+            try:
+                context.run_action("夏拉姆之门_退出流程")
+                time.sleep(2)
+            except Exception as e:
+                _log(f"房间退出异常: {e}")
+            continue
+
         try:
             context.run_action("游戏启动")
             time.sleep(3)

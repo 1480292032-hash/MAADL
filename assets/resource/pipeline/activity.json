@@ -383,6 +383,207 @@
         "post_delay": 2500,
         "next": []
     },
+    // ============ 夏拉姆·快捷菜单（兔子头，2026-11-26 实机校准） ============
+    // 房间左上角兔子头（引导员）点开/收起左侧纵向菜单：
+    // 夏拉姆任务(y≈185) / 前往夏拉姆之门(≈250) / 钥石兑换(≈315) /
+    // 符石挑战(≈375) / 领域争夺战(≈437) / 拾荒者商店(≈500)
+    // 菜单项点击一律用 OCR 文字定位（实测盲点坐标反复踩偏，OCR 点击更稳）
+    "夏拉姆_菜单按钮": {
+        "recognition": "TemplateMatch",
+        "template": "daily/kabbalah_menu.png",
+        "roi": [
+            0,
+            50,
+            180,
+            160
+        ],
+        "threshold": 0.6,
+        "action": "Click",
+        "post_delay": 2000,
+        "next": []
+    },
+    "夏拉姆任务_菜单项": {
+        "recognition": "OCR",
+        "expected": [
+            "夏拉姆任务"
+        ],
+        "roi": [
+            10,
+            140,
+            300,
+            100
+        ],
+        "action": "Click",
+        "post_delay": 2500,
+        "next": []
+    },
+    "夏拉姆_前往大门菜单项": {
+        "recognition": "OCR",
+        "expected": [
+            "前往夏拉姆之门"
+        ],
+        "roi": [
+            10,
+            210,
+            320,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+    "夏拉姆_钥石兑换菜单项": {
+        "recognition": "OCR",
+        "expected": [
+            "钥石兑换"
+        ],
+        "roi": [
+            10,
+            280,
+            300,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 2500,
+        "next": []
+    },
+    "夏拉姆_符石挑战菜单项": {
+        "recognition": "OCR",
+        "expected": [
+            "符石挑战"
+        ],
+        "roi": [
+            10,
+            335,
+            300,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+    "夏拉姆_拾荒者商店菜单项": {
+        "recognition": "OCR",
+        "expected": [
+            "拾荒者商店"
+        ],
+        "roi": [
+            10,
+            460,
+            300,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // ============ 夏拉姆·符石挑战 ============
+
+    // 符石挑战列表页标题特征（确认在列表页）
+    "夏拉姆_挑战页标题": {
+        "recognition": "OCR",
+        "expected": [
+            "符石挑战"
+        ],
+        "roi": [
+            280,
+            15,
+            500,
+            55
+        ]
+    },
+    // 评级字母 D（灰白金属大字；S/A/B/C 后续按需补模板）
+    "夏拉姆_等级D": {
+        "recognition": "TemplateMatch",
+        "template": "daily/kabbalah_grade_d.png",
+        "roi": [
+            0,
+            380,
+            1280,
+            220
+        ],
+        "threshold": 0.65,
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // 组队设置弹窗：仅好友和社团成员可见（第一项）
+    "夏拉姆_组队仅好友": {
+        "recognition": "OCR",
+        "expected": [
+            "仅好友和社团成员可见"
+        ],
+        "roi": [
+            340,
+            230,
+            450,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 1200,
+        "next": []
+    },
+    "夏拉姆_组队确定": {
+        "recognition": "TemplateMatch",
+        "template": "daily/kabbalah_confirm.png",
+        "roi": [
+            700,
+            400,
+            320,
+            150
+        ],
+        "threshold": 0.8,
+        "action": "Click",
+        "post_delay": 3000,
+        "next": []
+    },
+
+    // 联机·房间页：战斗开始
+    "夏拉姆_战斗开始": {
+        "recognition": "OCR",
+        "expected": [
+            "战斗开始"
+        ],
+        "roi": [
+            1080,
+            620,
+            200,
+            90
+        ],
+        "action": "Click",
+        "post_delay": 6000,
+        "next": []
+    },
+
+    // 战斗胜负
+    "夏拉姆_战斗胜利": {
+        "recognition": "OCR",
+        "expected": [
+            "战斗胜利"
+        ],
+        "roi": [
+            600,
+            0,
+            680,
+            160
+        ]
+    },
+    "夏拉姆_战斗失败": {
+        "recognition": "OCR",
+        "expected": [
+            "战斗失败",
+            "挑战失败"
+        ],
+        "roi": [
+            300,
+            100,
+            680,
+            200
+        ]
+    },
+
     // 退出组合：先关确认弹窗（若在），再点右上角门图标
     "夏拉姆之门_退出流程": {
         "recognition": "DirectHit",

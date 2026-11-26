@@ -365,7 +365,9 @@ class ParkFarm(CustomAction):
                     center = _box_center(home)
                     click(*center, delay=3.0)
                 else:
-                    click(1213, 33, delay=3.0)
+                    # 3.7.4 主界面右上角 (1213,33) 改成了房间入口——不再盲点，
+                    # 未识别到家园图标时交给返回位循环继续（防误入房间系统）
+                    pass
 
             # 主界面 → 乐园导航链（复用 pipeline 节点）
             main_ui = _hit(context, shot(), "日常_主界面确认")
@@ -764,7 +766,9 @@ class ArenaFight(CustomAction):
                     c = _box_center(home)
                     click(*c, delay=3.0)
                 else:
-                    click(1213, 33, delay=3.0)
+                    # 3.7.4 主界面右上角 (1213,33) 改成了房间入口——不再盲点，
+                    # 未识别到家园图标时交给返回位循环继续（防误入房间系统）
+                    pass
 
             # 主界面 → 作战中心·活动页签 → 竞技场卡片（2026-11-23 迁移）
             img = shot()
@@ -979,8 +983,7 @@ def _ensure_main_screen(context, ctrl):
         if home is not None and home.hit:
             c = _box_center(home)
             _click(ctrl, *c, 3.0)
-        else:
-            _click(ctrl, 1213, 33, 3.0)
+        # 未识别到家园图标时不盲点右上角（3.7.4 该位置是房间入口，防误入）
 
     return _hit(context, _shot(ctrl), "日常_主界面确认") is not None
 
@@ -1129,10 +1132,14 @@ class StoryFarmAgent(CustomAction):
         at_story = False
         for _ in range(3):
             img = shot()
-            d = _hit(context, img, "剧情_页签选中") if img is not None else None
-            if d is not None and d.hit:
-                at_story = True
-                break
+            if img is not None:
+                d = _hit(context, img, "剧情_页签选中")
+                t = _hit(context, img, "作战中心标题")
+                # 双条件：页签选中态 + 顶部「作战」标题
+                # （3.7.4 房间/其它界面的粉红元素会单独误命中页签模板）
+                if d is not None and d.hit and t is not None and t.hit:
+                    at_story = True
+                    break
             click(60, 125, 2.5)   # 左栏「剧情」页签
         if not at_story:
             _log("未进入剧情页签")
@@ -1235,8 +1242,19 @@ class StoryFarmAgent(CustomAction):
                 click(1022, 155, 2.0)  # X 关详情
                 continue
 
-            # 作战准备 → 编队 → 出击 → 战斗 → 回地图
+            # 作战准备 → 编队
             click(975, 558, 4.0)
+            # 编队页：等出击按钮并点击（此前缺失此步——一直卡在编队页超时）
+            atk = wait_hit(context, ctrl, "剧情_出击", 10)
+            if atk is None:
+                _log("编队页未出现出击按钮（队伍不足/弹窗阻挡？）")
+                click(*BACK_POS, 2.0)
+                continue
+            click(*_box_center(atk), 8.0)
+            # 战斗前对话跳过（偶发）
+            skip = _hit(context, shot(), "剧情_战斗前对话跳过")
+            if skip is not None and skip.hit:
+                click(*_box_center(skip), 1.5)
             battle_ok = self._battle_until_map(context, ctrl, max_rounds=BATTLE_ROUNDS_LIMIT)
             if battle_ok is None:
                 return False  # 致命异常

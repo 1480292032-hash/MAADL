@@ -493,20 +493,52 @@
             55
         ]
     },
-    // 评级字母 D（灰白金属大字；S/A/B/C 后续按需补模板）
+    // 评级字母（居中卡片大字母；命中=目标等级卡片已居中，点击=弹组队设置）
+    // 注：模板只匹配居中大字母（侧边小卡字母尺寸不同不匹配）→ agent 需先滚到居中
+    // C/SS/SSS 暂无模板素材（配置选了会跳过）
+    "夏拉姆_等级S": {
+        "recognition": "TemplateMatch",
+        "template": "daily/kabbalah_grade_s.png",
+        "roi": [
+            400,
+            380,
+            480,
+            240
+        ],
+        "threshold": 0.8
+    },
+    "夏拉姆_等级A": {
+        "recognition": "TemplateMatch",
+        "template": "daily/kabbalah_grade_a.png",
+        "roi": [
+            400,
+            380,
+            480,
+            240
+        ],
+        "threshold": 0.8
+    },
+    "夏拉姆_等级B": {
+        "recognition": "TemplateMatch",
+        "template": "daily/kabbalah_grade_b.png",
+        "roi": [
+            400,
+            380,
+            480,
+            240
+        ],
+        "threshold": 0.8
+    },
     "夏拉姆_等级D": {
         "recognition": "TemplateMatch",
         "template": "daily/kabbalah_grade_d.png",
         "roi": [
-            0,
+            400,
             380,
-            1280,
-            220
+            480,
+            240
         ],
-        "threshold": 0.65,
-        "action": "Click",
-        "post_delay": 3000,
-        "next": []
+        "threshold": 0.8
     },
 
     // 组队设置弹窗：仅好友和社团成员可见（第一项）
@@ -584,6 +616,113 @@
         ]
     },
 
+    // ============ 夏拉姆·商店/任务/聚灵（2026-11-27 实机校准） ============
+
+    // 拾荒者商店（补给·常规）商品区：「免费获得」标记（每日免费随机挑战符石）
+    "夏拉姆_商店免费符石": {
+        "recognition": "OCR",
+        "expected": [
+            "免费获得"
+        ],
+        "roi": [
+            0,
+            280,
+            1280,
+            360
+        ]
+    },
+    // 购买确认弹窗的粉红「购买」按钮（模板；弹窗居中 (694,570,142x56)）
+    "夏拉姆_购买确认": {
+        "recognition": "TemplateMatch",
+        "template": "daily/kabbalah_buy_confirm.png",
+        "roi": [
+            620,
+            520,
+            320,
+            140
+        ],
+        "threshold": 0.8
+    },
+
+    // 夏拉姆任务界面（每日/每周任务；完成项显示「领取」按钮）
+    "夏拉姆_任务界面": {
+        "recognition": "OCR",
+        "expected": [
+            "夏拉姆任务"
+        ],
+        "roi": [
+            100,
+            30,
+            400,
+            60
+        ]
+    },
+    "夏拉姆_任务领取": {
+        "recognition": "OCR",
+        "expected": [
+            "领取"
+        ],
+        "roi": [
+            300,
+            100,
+            950,
+            500
+        ]
+    },
+
+    // 聚灵界面（钥石兑换；右下「开启1次」免费次数 x/y）
+    "夏拉姆_聚灵界面": {
+        "recognition": "OCR",
+        "expected": [
+            "聚灵"
+        ],
+        "roi": [
+            280,
+            15,
+            400,
+            55
+        ]
+    },
+    "夏拉姆_聚灵开启1次": {
+        "recognition": "OCR",
+        "expected": [
+            "开启1次"
+        ],
+        "roi": [
+            1020,
+            460,
+            280,
+            120
+        ]
+    },
+    // 战斗介绍页特征（左下「小提示」标签；介绍页不点会自动进战斗，
+    // 若长时间停留=战斗未开始（缺门票等），agent 快速判负）
+    "夏拉姆_介绍页提示": {
+        "recognition": "OCR",
+        "expected": [
+            "小提示"
+        ],
+        "roi": [
+            20,
+            600,
+            240,
+            100
+        ]
+    },
+    // 聚灵开启确认弹窗（「开启确认」标题 + 确认按钮 (890,513)）
+    "夏拉姆_聚灵确认": {
+        "recognition": "OCR",
+        "expected": [
+            "开启确认"
+        ],
+        "roi": [
+            300,
+            150,
+            500,
+            80
+        ]
+    },
+
     // 退出组合：先关确认弹窗（若在），再点右上角门图标
     "夏拉姆之门_退出流程": {
         "recognition": "DirectHit",
@@ -592,6 +731,27 @@
             "夏拉姆之门_退出图标"
         ],
         "timeout": 15000
+    },
+
+    // 夏拉姆符石挑战 agent 入口（CustomAction 全流程）
+    "夏拉姆符石挑战循环": {
+        "recognition": "DirectHit",
+        "action": "Custom",
+        "custom_action": "夏拉姆符石挑战",
+        "custom_action_param": {},
+        "timeout": 3600000,
+        "focus": {
+            "Node.Action.Starting": "开始夏拉姆符石挑战……"
+        }
+    },
+
+    // 调度器子流程组合节点
+    "子流程_夏拉姆": {
+        "recognition": "DirectHit",
+        "next": [
+            "夏拉姆符石挑战循环"
+        ],
+        "timeout": 30000
     },
 
     // 「前往」按钮（右下，实测约 1190,540；不同剧场活动按钮位置略有差异）

@@ -35,7 +35,7 @@ ARENA_DEFAULT = {
 DEFAULT_DAILY_ORDER = [
     "签到", "补给站", "邮件", "联络", "社团", "研发中心", "次元入侵",
     "追猎计划", "特训矩阵", "竞技场", "精灵试炼", "世界之眼", "魔女日程",
-    "每日副本", "剧情推图",
+    "每日副本", "剧情推图", "夏拉姆符石挑战",
 ]
 
 
@@ -47,12 +47,17 @@ def read_park_config():
         cfg["mode"] = data.get("park_mode", "hard")
         cfg["max_stages"] = max(1, min(30, int(data.get("park_max_stages", 3))))
         cfg["volume"] = max(1, min(22, int(data.get("story_volume", 6))))
+        grades = data.get("kabbalah_grades", ["D"])
+        valid = [g for g in ("SSS", "SS", "S", "A", "B", "C", "D") if g in grades]             if isinstance(grades, list) else []
+        cfg["kabbalah_grades"] = valid or ["D"]
+        cfg["kabbalah_times"] = max(1, min(9, int(data.get("kabbalah_times", 3))))
+        cfg["kabbalah_exchange"] = bool(data.get("kabbalah_exchange", False))
     except Exception:
         pass
     return cfg
 
 
-def write_park_config(mode, max_stages, volume=6):
+def write_park_config(mode, max_stages, volume=6, grades=None, times=3, exchange=False):
     cfg = {"park_mode": mode if mode in ("story", "hard", "hell") else "hard",
            "park_max_stages": max(1, min(30, int(max_stages))),
            "story_volume": max(1, min(22, int(volume)))}
@@ -64,10 +69,21 @@ def write_park_config(mode, max_stages, volume=6):
     except Exception:
         pass
     existing.update(cfg)
+    if isinstance(grades, list):
+        valid = [g for g in ("SSS", "SS", "S", "A", "B", "C", "D") if g in grades]
+        if valid:
+            existing["kabbalah_grades"] = valid
+    if times is not None:
+        existing["kabbalah_times"] = max(1, min(9, int(times)))
+    if exchange is not None:
+        existing["kabbalah_exchange"] = bool(exchange)
     with open(DAILY_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(existing, f, ensure_ascii=False, indent=4)
     return {"mode": cfg["park_mode"], "max_stages": cfg["park_max_stages"],
-            "volume": cfg["story_volume"]}
+            "volume": cfg["story_volume"],
+            "kabbalah_grades": existing.get("kabbalah_grades", ["D"]),
+            "kabbalah_times": existing.get("kabbalah_times", 3),
+            "kabbalah_exchange": existing.get("kabbalah_exchange", False)}
 
 
 def read_daily_order():
@@ -196,7 +212,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps({"ok": True, "arena": cfg}, ensure_ascii=False))
             elif path == "/api/park":
                 cfg = write_park_config(body.get("mode", "hard"), body.get("max_stages", 3),
-                                        body.get("volume", 6))
+                                        body.get("volume", 6), body.get("grades"),
+                                        body.get("kabbalah_times"), body.get("kabbalah_exchange"))
                 self._send(200, json.dumps({"ok": True, "park": cfg}, ensure_ascii=False))
             elif path == "/api/daily":
                 order = [s for s in body.get("order", []) if s in DEFAULT_DAILY_ORDER]

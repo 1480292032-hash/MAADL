@@ -820,6 +820,7 @@ DAILY_STEPS = {
     "世界之眼": "子流程_世界之眼",
     "魔女日程": "子流程_魔女日程",
     "每日副本": "子流程_每日副本",
+    "夏拉姆符石挑战": "子流程_夏拉姆",
     "剧情推图": "剧情推图循环",
 }
 
@@ -849,6 +850,11 @@ def load_daily_config():
         cfg["park_mode"] = data.get("park_mode", "hard")
         cfg["park_max_stages"] = max(1, min(30, int(data.get("park_max_stages", 3))))
         cfg["story_volume"] = max(1, min(22, int(data.get("story_volume", 6))))
+        grades = data.get("kabbalah_grades", ["D"])
+        valid = [g for g in ("SSS", "SS", "S", "A", "B", "C", "D") if g in grades] if isinstance(grades, list) else []
+        cfg["kabbalah_grades"] = valid or ["D"]
+        cfg["kabbalah_times"] = max(1, min(9, int(data.get("kabbalah_times", 3))))
+        cfg["kabbalah_exchange"] = bool(data.get("kabbalah_exchange", False))
         cfg["stage_name"] = str(data.get("stage_name", cfg["stage_name"]))
         cfg["level"] = str(data.get("level", cfg["level"]))
         cfg["times"] = max(1, min(9, int(data.get("times", 1))))
@@ -1988,6 +1994,388 @@ class SpiritTrial(CustomAction):
 
         _log("精灵试炼单场战斗超时")
         return None
+
+
+@AgentServer.custom_action("夏拉姆符石挑战")
+class KabbalahTrial(CustomAction):
+    """夏拉姆之门·符石挑战全流程 agent（2026-11-27 实机校准）。
+
+    活动页签→夏拉姆之门卡片→3D 房间→快捷菜单(兔子头长按)→拾荒者商店
+    →买每日免费「随机挑战符石」→菜单→符石挑战→滑到目标等级卡片居中
+    →长按等级字母→组队设置(仅好友+自动匹配关)→确定(860,487)
+    →联机房间→战斗开始(长按)→战斗介绍页(不点，等自动)→技能轮点战斗
+    →胜利(结算)/失败(回列表)→按次数循环/失败换下一个等级
+    →菜单→夏拉姆任务领奖→钥石兑换(聚灵开启，网页开关)→退出房间。
+
+    3.7.4 交互要点：多数按钮需长按 ~600ms（瞬时点击被吞）。
+    """
+
+    SKILLS = [(225, 483), (450, 487), (312, 523), (600, 498), (545, 585), (810, 535)]
+    SPECIAL = (620, 330)   # 金光大圆（特殊/觉醒）
+    GRADE_TEMPLATES = {
+        "S": "夏拉姆_等级S",
+        "A": "夏拉姆_等级A",
+        "B": "夏拉姆_等级B",
+        "D": "夏拉姆_等级D",
+    }   # C/SS/SSS 暂无模板素材
+    GRADE_ORDER = ["SSS", "SS", "S", "A", "B", "C", "D"]
+
+    def run(self, context, argv) -> bool:
+        cfg = load_daily_config()
+        grades = cfg["kabbalah_grades"]
+        times = cfg["kabbalah_times"]
+        exchange_on = cfg["kabbalah_exchange"]
+        usable = [g for g in self.GRADE_ORDER if g in grades and g in self.GRADE_TEMPLATES]
+        _log(f"夏拉姆符石挑战：等级 {usable}（请求 {grades}）· 次数 {times} · 兑换 {'开' if exchange_on else '关'}")
+        if not usable:
+            _log("配置的等级均无模板素材（仅有 S/A/B/D），结束")
+            return True
+
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+
+        # 1. 导航进房间
+        if not self._enter_room(context, ctrl):
+            _log("未进入夏拉姆房间，结束")
+            return True
+
+        # 2. 商店买每日免费符石（无则跳过——可能已买/未刷新）
+        self._buy_free_stone(context, ctrl)
+
+        # 3. 按等级从高到低挑战，失败换下一个
+        wins = 0
+        for grade in usable:
+            if wins >= times:
+                break
+            got = self._challenge_grade(context, ctrl, grade, times - wins)
+            wins += got
+            _log(f"夏拉姆战绩：{wins}/{times}（{grade} 级 +{got}）")
+            if got < 0:
+                break
+
+        # 4. 夏拉姆任务领奖
+        self._claim_tasks(context, ctrl)
+
+        # 5. 钥石兑换（聚灵开启，开关控制）
+        if exchange_on:
+            self._do_exchange(context, ctrl)
+
+        # 6. 退出房间
+        self._exit_kabbalah(context, ctrl)
+        _ensure_main_screen(context, ctrl)
+        _log(f"夏拉姆符石挑战结束（胜 {wins} 场）")
+        return True
+
+    # ---- 导航 ----
+
+    def _in_room(self, context, ctrl):
+        img = _shot(ctrl)
+        if img is None:
+            return False
+        d = _hit(context, img, "夏拉姆_菜单按钮")
+        return d is not None and d.hit
+
+    def _inside_kabbalah(self, context, ctrl):
+        """是否在夏拉姆内部子页面（挑战列表/商店/聚灵等）"""
+        img = _shot(ctrl)
+        if img is None:
+            return False
+        for entry in ("夏拉姆_挑战页标题", "夏拉姆_商店免费符石", "夏拉姆_聚灵界面"):
+            d = _hit(context, img, entry)
+            if d is not None and d.hit:
+                return True
+        return False
+
+    def _enter_room(self, context, ctrl):
+        if self._in_room(context, ctrl):
+            _log("已在夏拉姆房间")
+            return True
+        # 夏拉姆内部子页面（列表/商店/聚灵）→ 逐级返回房间
+        if self._inside_kabbalah(context, ctrl):
+            _log("在夏拉姆内部子页面，逐级返回房间")
+            for _ in range(3):
+                _click_hold(ctrl, 55, 35, 400, 2.5)
+                if self._in_room(context, ctrl):
+                    _log("已返回夏拉姆房间")
+                    return True
+        if not _ensure_main_screen(context, ctrl):
+            return False
+        if not _navigate_activity(context, ctrl, "活动_夏拉姆之门卡片", "夏拉姆之门",
+                                  partial_names=["夏拉姆"]):
+            return False
+        time.sleep(4)
+        for _ in range(3):
+            if self._in_room(context, ctrl):
+                _log("已进入夏拉姆房间")
+                return True
+            time.sleep(2)
+        return False
+
+    # ---- 快捷菜单（兔子头 toggle；先截图判断开合状态） ----
+
+    def _menu_open(self, context, ctrl):
+        img = _shot(ctrl)
+        if img is None:
+            return False
+        d = _hit(context, img, "夏拉姆_拾荒者商店菜单项")
+        return d is not None and d.hit
+
+    def _open_menu(self, context, ctrl):
+        if self._menu_open(context, ctrl):
+            return True
+        _click_hold(ctrl, 64, 127, 600, 2.0)
+        for _ in range(2):
+            if self._menu_open(context, ctrl):
+                return True
+            time.sleep(1.0)
+        return False
+
+    def _menu_item(self, context, ctrl, item_y, wait=2.5):
+        """打开菜单并点击某项（y 为菜单项行位置）"""
+        if not self._open_menu(context, ctrl):
+            _log("快捷菜单未展开")
+            return False
+        _click_hold(ctrl, 150, item_y, 600, wait)
+        return True
+
+    # ---- 拾荒者商店：买每日免费符石 ----
+
+    def _buy_free_stone(self, context, ctrl):
+        if not self._menu_item(context, ctrl, 500, wait=3.0):   # 拾荒者商店
+            return
+        time.sleep(1.0)
+        img = _shot(ctrl)
+        if img is None:
+            self._back_to_room(context, ctrl)
+            return
+        free = _hit(context, img, "夏拉姆_商店免费符石")
+        if free is None or not free.hit:
+            _log("商店当前无免费符石（已买/未刷出），跳过")
+            self._back_to_room(context, ctrl)
+            return
+        b = list(free.box)
+        cx = int(b[0] + b[2] / 2)
+        _log(f"发现免费符石（x={cx}），购买")
+        _click_hold(ctrl, cx, 640, 600, 3.0)   # 同列底部购买按钮
+        confirmed = False
+        for _ in range(3):
+            img = _shot(ctrl)
+            if img is None:
+                break
+            conf = _hit(context, img, "夏拉姆_购买确认")
+            if conf is not None and conf.hit:
+                cb = list(conf.box)
+                _click_hold(ctrl, cb[0] + cb[2] / 2, cb[1] + cb[3] / 2, 600, 3.0)
+                confirmed = True
+                break
+            time.sleep(1.2)
+        for _ in range(4):
+            img = _shot(ctrl)
+            g = _hit(context, img, "世界之眼_获得物品关闭")
+            if g is not None and g.hit:
+                _click(ctrl, 55, 35, 2.0)
+                break
+            time.sleep(1.2)
+        _log("免费符石购买完成" if confirmed else "购买确认弹窗未出现")
+        self._back_to_room(context, ctrl)
+
+    def _back_to_room(self, context, ctrl):
+        """左上返回回房间并确认"""
+        for _ in range(3):
+            if self._in_room(context, ctrl):
+                return True
+            _click_hold(ctrl, 55, 35, 400, 2.5)
+        return self._in_room(context, ctrl)
+
+    # ---- 符石挑战 ----
+
+    def _challenge_grade(self, context, ctrl, grade, remaining):
+        """挑战指定等级最多 remaining 次；返回成功场数（-1=致命）"""
+        if not self._menu_item(context, ctrl, 375, wait=3.5):   # 符石挑战
+            return 0
+        tpl = self.GRADE_TEMPLATES[grade]
+
+        found = False
+        for step in range(14):
+            img = _shot(ctrl)
+            if img is not None:
+                d = _hit(context, img, tpl)
+                if d is not None and d.hit:
+                    found = True
+                    break
+            _click_hold(ctrl, 940, 450, 350, 1.4)   # 滚一张（点右邻卡片）
+            time.sleep(1.0)
+        if not found:
+            _log(f"{grade} 级卡片未找到，跳过")
+            self._back_to_room(context, ctrl)
+            return 0
+        _log(f"{grade} 级卡片已锁定，开始挑战")
+
+        wins = 0
+        for _attempt in range(remaining):
+            _click_hold(ctrl, 545, 520, 600, 2.5)   # 点居中字母 → 组队设置
+            img = _shot(ctrl)
+            if img is None:
+                continue
+            only = _hit(context, img, "夏拉姆_组队仅好友")
+            if only is not None and only.hit:
+                ob = list(only.box)
+                _click_hold(ctrl, ob[0] + ob[2] / 2, ob[1] + ob[3] / 2, 600, 1.2)
+            else:
+                _log("组队设置弹窗未出现（字母点击被吞），重试")
+                continue
+            _click_hold(ctrl, 860, 487, 400, 3.0)   # 确定
+            at_room = False
+            for _ in range(4):
+                img = _shot(ctrl)
+                if img is None:
+                    continue
+                st = _hit(context, img, "夏拉姆_战斗开始")
+                if st is not None and st.hit:
+                    at_room = True
+                    break
+                time.sleep(1.5)
+            if not at_room:
+                _log("未进入联机房间（确定点击被吞？），重试本场")
+                img = _shot(ctrl)
+                t = _hit(context, img, "夏拉姆_挑战页标题") if img is not None else None
+                if t is None or not t.hit:
+                    _log("界面状态未知，结束本等级")
+                    self._back_to_room(context, ctrl)
+                    return wins
+                _click_hold(ctrl, 545, 520, 600, 2.5)
+                continue
+
+            _click_hold(ctrl, 1187, 680, 600, 5.0)   # 战斗开始 → 介绍页
+            win = self._fight_loop(context, ctrl)
+            if win is None:
+                return -1
+            if win:
+                wins += 1
+            else:
+                _log(f"{grade} 级挑战失败，尝试下一等级")
+                break
+
+        self._back_to_room(context, ctrl)
+        return wins
+
+    def _fight_loop(self, context, ctrl):
+        """战斗轮点技能直至胜利/失败。True=胜利 False=失败 None=致命"""
+        rounds = 0
+        intro_stuck = 0   # 连续停留在介绍页的轮数（战斗未开始检测）
+        while rounds < 100:
+            rounds += 1
+            img = _shot(ctrl)
+            if img is None:
+                time.sleep(2.0)
+                continue
+
+            v = _hit(context, img, "夏拉姆_战斗胜利")
+            if v is not None and v.hit:
+                _log("战斗胜利！")
+                _click(ctrl, 1150, 710, 3.0)
+                _click(ctrl, 1150, 710, 3.0)
+                time.sleep(2.0)
+                return True
+
+            t = _hit(context, img, "夏拉姆_挑战页标题")
+            if t is not None and t.hit:
+                _log("已回到符石挑战列表（战斗失败）")
+                return False
+
+            # 介绍页停留检测：一直停在介绍页=战斗没开始（缺门票/网络），快速判负
+            tip = _hit(context, img, "夏拉姆_介绍页提示")
+            if tip is not None and tip.hit:
+                intro_stuck += 1
+                if intro_stuck >= 3:
+                    _log("介绍页停留过久（战斗未开始，可能缺门票），判定失败")
+                    return False
+            else:
+                intro_stuck = 0
+
+            # 战斗中（含介绍页等待）：轮点技能，1.2s 错开
+            for k in range(len(self.SKILLS)):
+                _click_hold(ctrl, self.SKILLS[k][0], self.SKILLS[k][1], 120, 1.2)
+            _click_hold(ctrl, self.SPECIAL[0], self.SPECIAL[1], 120, 1.0)
+
+        _log("战斗轮次超限，视为失败")
+        return False
+
+    # ---- 夏拉姆任务领奖 ----
+
+    def _claim_tasks(self, context, ctrl):
+        if not self._menu_item(context, ctrl, 185, wait=3.0):   # 夏拉姆任务
+            return
+        time.sleep(1.0)
+        claimed = 0
+        for _ in range(4):
+            img = _shot(ctrl)
+            if img is None:
+                break
+            r = _hit(context, img, "夏拉姆_任务领取")
+            if r is None or not r.hit:
+                break
+            b = list(r.box)
+            _click_hold(ctrl, b[0] + b[2] / 2, b[1] + b[3] / 2, 500, 3.0)
+            claimed += 1
+            for _ in range(3):
+                img = _shot(ctrl)
+                g = _hit(context, img, "世界之眼_获得物品关闭")
+                if g is not None and g.hit:
+                    _click(ctrl, 55, 35, 2.0)
+                    break
+                time.sleep(1.0)
+        _log(f"夏拉姆任务领取 {claimed} 个" if claimed else "夏拉姆任务暂无可领取")
+        _click_hold(ctrl, 1160, 90, 400, 2.0)   # 关闭任务界面
+        self._back_to_room(context, ctrl)
+
+    # ---- 钥石兑换（聚灵开启） ----
+
+    def _do_exchange(self, context, ctrl):
+        if not self._menu_item(context, ctrl, 315, wait=3.0):   # 钥石兑换
+            return
+        time.sleep(1.0)
+        done = 0
+        for _ in range(4):
+            img = _shot(ctrl)
+            if img is None:
+                break
+            btn = _hit(context, img, "夏拉姆_聚灵开启1次")
+            if btn is None or not btn.hit:
+                break
+            b = list(btn.box)
+            _click_hold(ctrl, b[0] + b[2] / 2, b[1] + b[3] / 2, 600, 2.5)
+            img = _shot(ctrl)
+            conf = _hit(context, img, "夏拉姆_聚灵确认") if img is not None else None
+            if conf is None or not conf.hit:
+                _log("聚灵无可用次数，结束兑换")
+                break
+            _click_hold(ctrl, 890, 513, 600, 3.0)   # 确认
+            done += 1
+            for _ in range(3):
+                img = _shot(ctrl)
+                g = _hit(context, img, "世界之眼_获得物品关闭")
+                if g is not None and g.hit:
+                    _click(ctrl, 55, 35, 2.0)
+                    break
+                time.sleep(1.0)
+        _log(f"钥石兑换开启 {done} 次" if done else "钥石兑换无次数")
+        _click_hold(ctrl, 30, 30, 400, 2.0)   # 聚灵左上返回
+        self._back_to_room(context, ctrl)
+
+    # ---- 退出夏拉姆之门 ----
+
+    def _exit_kabbalah(self, context, ctrl):
+        if not self._in_room(context, ctrl):
+            return
+        _click_hold(ctrl, 1230, 112, 600, 2.5)
+        img = _shot(ctrl)
+        if img is not None:
+            c = _hit(context, img, "夏拉姆之门_退出确认")
+            if c is not None and c.hit:
+                _click_hold(ctrl, 895, 515, 600, 2.5)
+        _log("已退出夏拉姆之门")
 
 
 def wait_hit(context, ctrl, entry, seconds=8):

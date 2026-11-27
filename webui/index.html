@@ -142,6 +142,30 @@
 </div>
 
 <div class="card">
+  <h2>夏拉姆之门 · 符石挑战</h2>
+  <div class="desc">
+    自动进夏拉姆→买每日免费符石→符石挑战→组队(仅好友/不匹配)→自动打技能循环。
+    <b>等级</b>：勾选可挑战的评级（高→低依次尝试，打不过自动换下一个）。目前仅有 S/A/B/D 模板；<b>次数</b>：今日总挑战次数。
+  </div>
+  <div class="slot-row">
+    <div class="label">可挑战等级</div>
+    <div class="slot-opts" id="opts-kbgrade" style="flex-wrap:wrap"></div>
+  </div>
+  <div class="slot-row">
+    <div class="label">今日挑战次数</div>
+    <div class="slot-opts">
+      <input id="kb-times" type="number" min="1" max="9" value="3"
+        style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-family:inherit">
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px">
+        <input id="kb-exchange" type="checkbox"> 钥石兑换(聚灵开启)
+      </label>
+      <button class="ghost" style="flex:0 0 auto" onclick="saveKabbalah()">保存</button>
+    </div>
+  </div>
+  <div class="actions"><span id="kb-msg" style="font-size:13px;color:var(--ok)"></span></div>
+</div>
+
+<div class="card">
   <h2>竞技场 · 每日战斗场数</h2>
   <div class="desc">
     设置「青铜战场」每日自动匹配的场数。<b>填 0 = 不打竞技场</b>（任务会跳过）。<br>
@@ -208,12 +232,66 @@ async function loadConfig() {
     parkMode = data.park.mode || "hard";
     document.getElementById("park-max-stages").value = data.park.max_stages || 3;
     document.getElementById("park-volume").value = data.park.volume || 6;
+    if (data.park.kabbalah_grades) kbGrades = data.park.kabbalah_grades;
+    renderKbGrades();
+    document.getElementById("kb-times").value = data.park.kabbalah_times || 3;
+    document.getElementById("kb-exchange").checked = !!data.park.kabbalah_exchange;
     renderParkMode();
   }
   if (data.daily_order && data.daily_order.length) {
     dailyOrder = data.daily_order;
     renderOrder();
   }
+}
+
+let kbGrades = ["D"];
+const KB_ALL = ["SSS", "SS", "S", "A", "B", "C", "D"];
+
+function renderKbGrades() {
+  const box = document.getElementById("opts-kbgrade");
+  box.innerHTML = "";
+  KB_ALL.forEach(g => {
+    const d = document.createElement("div");
+    d.className = "slot-opt" + (kbGrades.includes(g) ? " on" : "");
+    d.textContent = g;
+    d.style.minWidth = "48px";
+    d.onclick = () => {
+      kbGrades = kbGrades.includes(g) ? kbGrades.filter(x => x !== g) : [...kbGrades, g];
+      renderKbGrades();
+    };
+    box.appendChild(d);
+  });
+}
+
+async function saveKabbalah() {
+  const times = parseInt(document.getElementById("kb-times").value, 10);
+  const st = document.getElementById("kb-msg");
+  if (isNaN(times) || times < 1 || times > 9) {
+    st.textContent = "✗ 次数请填 1~9";
+    st.style.color = "#ff6b6b";
+    return;
+  }
+  if (!kbGrades.length) {
+    st.textContent = "✗ 至少勾选一个等级";
+    st.style.color = "#ff6b6b";
+    return;
+  }
+  const r = await fetch("/api/park", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: parkMode,
+      max_stages: parseInt(document.getElementById("park-max-stages").value, 10) || 3,
+      volume: parseInt(document.getElementById("park-volume").value, 10) || 6,
+      grades: kbGrades,
+      kabbalah_times: times,
+      kabbalah_exchange: document.getElementById("kb-exchange").checked
+    })
+  });
+  const data = await r.json();
+  st.textContent = data.ok ? `✓ 已保存：等级 ${data.park.kabbalah_grades.join("/")} · 次数 ${data.park.kabbalah_times} · 兑换 ${data.park.kabbalah_exchange ? "开" : "关"}` : "✗ 保存失败";
+  st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
+  setTimeout(() => st.textContent = "", 4000);
 }
 
 let parkMode = "hard";

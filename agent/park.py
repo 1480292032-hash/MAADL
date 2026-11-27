@@ -2074,7 +2074,11 @@ class KabbalahTrial(CustomAction):
         if img is None:
             return False
         d = _hit(context, img, "夏拉姆_菜单按钮")
-        return d is not None and d.hit
+        if d is not None and d.hit:
+            return True
+        # 兜底：OCR 拾荒者《淘宝达人》标签（视角变化不影响 UI 浮层文字）
+        d2 = _hit(context, img, "夏拉姆_房间特征")
+        return d2 is not None and d2.hit
 
     def _inside_kabbalah(self, context, ctrl):
         """是否在夏拉姆内部子页面（挑战列表/商店/聚灵等）"""
@@ -2124,11 +2128,12 @@ class KabbalahTrial(CustomAction):
     def _open_menu(self, context, ctrl):
         if self._menu_open(context, ctrl):
             return True
-        _click_hold(ctrl, 64, 127, 600, 2.0)
-        for _ in range(2):
+        # 游戏输入偶发被吞（3.7.4），点兔子头最多重试 4 次
+        for attempt in range(4):
+            _click_hold(ctrl, 64, 127, 600, 2.2)
             if self._menu_open(context, ctrl):
                 return True
-            time.sleep(1.0)
+            time.sleep(1.2)
         return False
 
     def _menu_item(self, context, ctrl, item_y, wait=2.5):

@@ -168,6 +168,17 @@ def _keys(context, image):
     return _ocr_int(context, image, "乐园_钥匙数")
 
 
+def _click_hold(ctrl, x, y, hold_ms=600, delay=1.0):
+    """3.7.4 长按点击（重要发现 11-27）：游戏部分按钮（确认/购买/战斗开始/
+    列表卡片等）对瞬时点击（<200ms）不响应，需按住约 600ms-1.5s 才生效。
+    用 MaaFW swipe 原地滑动实现长按（雷电 input 不支持 motionevent）。"""
+    try:
+        ctrl.post_swipe(int(x), int(y), int(x), int(y), int(hold_ms)).wait()
+    except Exception as e:
+        _log(f"长按异常: {e}")
+    time.sleep(delay)
+
+
 def _click(ctrl, x, y, delay=1.0):
     ctrl.post_click(int(x), int(y)).wait()
     time.sleep(delay)

@@ -822,6 +822,7 @@ DAILY_STEPS = {
     "每日副本": "子流程_每日副本",
     "夏拉姆符石挑战": "子流程_夏拉姆",
     "剧场番外": "子流程_剧场番外",
+    "约会料理": "子流程_约会料理",
     "剧情推图": "剧情推图循环",
 }
 
@@ -858,6 +859,10 @@ def load_daily_config():
         cfg["kabbalah_exchange"] = bool(data.get("kabbalah_exchange", False))
         cfg["theater_times"] = max(1, min(5, int(data.get("theater_times", 1))))
         cfg["theater_exchange"] = bool(data.get("theater_exchange", True))
+        shop = str(data.get("cook_shop", "面包店"))
+        cfg["cook_shop"] = shop if shop in ("面包店", "饮品店", "豪华餐厅") else "面包店"
+        cfg["cook_food"] = str(data.get("cook_food", "干面包"))
+        cfg["cook_times"] = max(1, min(10, int(data.get("cook_times", 1))))
         cfg["stage_name"] = str(data.get("stage_name", cfg["stage_name"]))
         cfg["level"] = str(data.get("level", cfg["level"]))
         cfg["times"] = max(1, min(9, int(data.get("times", 1))))
@@ -2655,6 +2660,260 @@ class TheaterExtra(CustomAction):
                 _log(f"档位 {bx},{by} 不可兑（已兑换/未达成）")
         _click(ctrl, *self.EXCHANGE_CLOSE_X, 3.0)
         _log("贡献兑换完成")
+
+
+@AgentServer.custom_action("约会料理")
+class DateCooking(CustomAction):
+    """约会·料理烹饪 agent（2026-11-29 实机校准）。
+
+    主界面「约会」卡片(930,430)→约会城市→长按底部「料理」(770,660)
+    →料理·制作页（每次打开都在面包店第1页；页序 面包店/饮品店/豪华餐厅）
+    →按配置翻页（列表左缘 (108,400) 向右拉 900ms，拉完等 5 秒——拉太快无效）
+    →（面包店+红豆年糕汤 先下拉 swipe(120,560→120,260) 才见）
+    →点目标食物格→材料面板 OCR 验证选中名字→OCR「不足」有则跳过不烹饪
+    →烹饪：面包店点「开始烹饪」；饮品店/豪华餐厅 times=10 点「烹饪10次」、
+      其余点「烹饪1次」×N → 重合点击连点 (1028,361) 直到烹饪按钮回归
+    →左上返回回约会城市。
+
+    食物清单（2026-11-29 逐格 OCR 材料面板统计，共 29 种）。
+    """
+
+    # 食物名 → 列表格坐标（两列布局：左 x=60 / 右 x=160）
+    FOODS = {
+        "面包店": {
+            "干面包": (60, 265), "牛奶面包": (160, 265),
+            "奶酪蛋挞": (60, 360), "黄油面包": (160, 360),
+            "布丁蛋糕": (60, 455), "黄豆粉面包": (160, 455),
+            "炸薯球": (60, 545), "抹茶蛋糕": (160, 545),
+            "糯米团子": (60, 635), "草莓大福": (160, 635),
+        },
+        "饮品店": {
+            "清甜果汁": (60, 265), "蔬菜汁": (160, 265),
+            "糯米酒": (60, 360), "水果布丁": (160, 360),
+            "布丁奶昔": (60, 455), "牛奶可可": (160, 455),
+            "薄荷抹茶": (60, 545), "绿色妖姬": (160, 545),
+            "薄荷绿茶": (60, 635),
+        },
+        "豪华餐厅": {
+            "水果寿司": (60, 265), "蔬菜蛋卷": (160, 265),
+            "水果披萨": (60, 360), "果蔬拼盘": (160, 360),
+            "多层汉堡": (60, 455), "百味拉面": (160, 455),
+            "意式热狗": (60, 545), "糯米甜豆腐": (160, 545),
+            "果木烤肉排": (60, 635),
+        },
+    }
+    BREAD_EXTRA = {"红豆年糕汤": (60, 590)}   # 面包店下拉后才可见的最后一种
+
+    SHOP_ORDER = ["面包店", "饮品店", "豪华餐厅"]
+    SHOP_NODE = {"面包店": "约会_店名面包店", "饮品店": "约会_店名饮品店",
+                 "豪华餐厅": "约会_店名豪华餐厅"}
+    DATE_CARD = (930, 430)      # 主界面「约会」卡片
+    COOK_BTN = (770, 660)       # 约会城市底部「料理」按钮
+    TAP_POS = (1028, 361)       # 重合点击连点位置（用户指定）
+    BACK = (55, 37)             # 左上返回
+
+    def run(self, context, argv) -> bool:
+        cfg = load_daily_config()
+        shop, food, times = cfg["cook_shop"], cfg["cook_food"], cfg["cook_times"]
+        menu = dict(self.FOODS.get(shop, {}))
+        if shop == "面包店":
+            menu.update(self.BREAD_EXTRA)
+        if food not in menu:
+            _log(f"食物 {food!r} 不在 {shop} 菜单里，结束（可选：{ '、'.join(menu) }）")
+            return True
+        _log(f"约会料理：{shop} · {food} · {times} 次")
+
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+
+        # 1. 进约会城市 + 料理页
+        if not self._enter_cooking(context, ctrl):
+            _log("未进入料理·制作页，结束")
+            return True
+
+        # 2. 翻页到目标餐厅
+        if not self._goto_shop(context, ctrl, shop):
+            _log(f"未翻到 {shop}，结束")
+            return True
+
+        # 3. 面包店最后一种需先下拉
+        if shop == "面包店" and food in self.BREAD_EXTRA:
+            ctrl.post_swipe(120, 560, 120, 260, 800).wait()
+            time.sleep(5)
+            _log("面包店列表已下拉")
+
+        # 4. 选食物 + 验证 + 不足检测
+        fx, fy = menu[food]
+        if not self._select_food(context, ctrl, fx, fy, food):
+            _log(f"未能选中 {food}（面板名不匹配），保守结束")
+            return True
+        img = _shot(ctrl)
+        if img is not None:
+            d = _hit(context, img, "约会_材料不足")
+            if d is not None and d.hit:
+                _log(f"{food} 材料不足，跳过烹饪")
+                self._back_to_city(context, ctrl)
+                return True
+
+        # 5. 烹饪
+        done = self._cook(context, ctrl, times)
+        _log(f"烹饪完成 {done}/{times} 轮")
+
+        # 6. 回约会城市
+        self._back_to_city(context, ctrl)
+        return True
+
+    # ---- 导航 ----
+
+    def _enter_cooking(self, context, ctrl):
+        """主界面 → 约会城市 → 料理·制作页"""
+        if not _ensure_main_screen(context, ctrl):
+            return False
+        ok = False
+        for _ in range(3):
+            _click(ctrl, *self.DATE_CARD, 5.0)
+            img = _shot(ctrl)
+            t = _hit(context, img, "约会_城市标题")
+            if t is not None and t.hit:
+                ok = True
+                break
+        if not ok:
+            _log("未进入约会城市")
+            return False
+        _log("已进入约会城市")
+        # 长按「料理」按钮（瞬时点击被吞）
+        for _ in range(3):
+            _click_hold(ctrl, *self.COOK_BTN, 600, 5.0)
+            img = _shot(ctrl)
+            t = _hit(context, img, "约会_料理页标题")
+            if t is not None and t.hit:
+                _log("已进入料理·制作页")
+                return True
+        _log("料理按钮长按 3 次未进入料理页")
+        return False
+
+    def _current_shop(self, context, ctrl):
+        img = _shot(ctrl)
+        if img is None:
+            return None
+        for name in self.SHOP_ORDER:
+            d = _hit(context, img, self.SHOP_NODE[name])
+            if d is not None and d.hit:
+                return name
+        return None
+
+    def _goto_shop(self, context, ctrl, target):
+        """从当前页翻到目标店（向右拉 900ms，每拉一次等 5 秒）"""
+        cur = self._current_shop(context, ctrl)
+        if cur == target:
+            _log(f"已在 {target}")
+            return True
+        if cur is None:
+            cur = "面包店"   # 每次打开都在第 1 页
+            _log("店名识别失败，按面包店（默认首页）处理")
+        steps = self.SHOP_ORDER.index(target) - self.SHOP_ORDER.index(cur)
+        if steps < 0:
+            _log(f"目标 {target} 在当前页 {cur} 之前，需重进料理页重置")
+            return False
+        for i in range(steps):
+            ctrl.post_swipe(108, 400, 640, 400, 900).wait()
+            time.sleep(5)   # 拉太快翻页无效
+            got = self._current_shop(context, ctrl)
+            _log(f"翻页 {i + 1}/{steps} → {got}")
+            if got == target:
+                return True
+        return self._current_shop(context, ctrl) == target
+
+    def _select_food(self, context, ctrl, fx, fy, food):
+        """点食物格并用材料面板标题验证（面板标题含食物名）"""
+        for attempt in range(3):
+            _click(ctrl, fx, fy, 2.5)
+            img = _shot(ctrl)
+            if img is None:
+                continue
+            d = _hit(context, img, "约会_材料面板标题")
+            if d is not None and d.hit:
+                title = _dtext(d)
+                if food in title:
+                    _log(f"已选中 {food}（面板：{title}）")
+                    return True
+                _log(f"第 {attempt + 1} 次点击后面板为「{title}」，非 {food}")
+            else:
+                _log(f"第 {attempt + 1} 次点击后未见材料面板")
+        return False
+
+    # ---- 烹饪 ----
+
+    def _cook(self, context, ctrl, times):
+        """执行烹饪循环，返回完成轮数"""
+        img = _shot(ctrl)
+        if img is None:
+            return 0
+        has_ten = _hit(context, img, "约会_烹饪10次") is not None and \
+            _hit(context, img, "约会_烹饪10次").hit
+        # 饮品店/豪华餐厅有「烹饪10次」按钮：times=10 一轮做完；
+        # 面包店只有「开始烹饪」：按次数逐轮
+        if has_ten and times >= 10:
+            rounds, btn = 1, "约会_烹饪10次"
+        else:
+            rounds, btn = times, ("约会_烹饪1次" if has_ten else "约会_开始烹饪")
+
+        done = 0
+        for r in range(rounds):
+            if not self._cook_one(context, ctrl, btn):
+                _log(f"第 {r + 1} 轮烹饪未确认完成，停止")
+                break
+            done += 1
+        return done
+
+    def _cook_one(self, context, ctrl, btn_entry):
+        """点烹饪按钮 → 连点重合点击直到按钮回归（一轮完成）"""
+        ok = False
+        for _ in range(3):
+            img = _shot(ctrl)
+            d = _hit(context, img, btn_entry)
+            if d is not None and d.hit:
+                bx, by = _box_center(d)
+                _click_hold(ctrl, bx, by, 600, 2.0)
+                ok = True
+                break
+            time.sleep(1.5)
+        if not ok:
+            # 兜底坐标（实测 2026-11-29）
+            fixed = (1175, 625) if btn_entry == "约会_烹饪10次" else (1185, 690)
+            _click_hold(ctrl, *fixed, 600, 2.0)
+
+        # 连点阶段：每 6 连点检查一次烹饪按钮是否回归（=做完）
+        t0 = time.time()
+        clicks = 0
+        while time.time() - t0 < 150:
+            for _ in range(6):
+                _click(ctrl, *self.TAP_POS, 0.4)
+                clicks += 1
+            img = _shot(ctrl)
+            if img is not None:
+                for entry in ("约会_开始烹饪", "约会_烹饪1次", "约会_烹饪10次"):
+                    d = _hit(context, img, entry)
+                    if d is not None and d.hit:
+                        return True   # 按钮回归 = 本轮烹饪完成
+            # 偶发获得弹窗遮挡 → 点中间尝试关闭
+            if clicks > 40:
+                _click(ctrl, 640, 400, 1.0)
+        _log("连点 150s 未见到烹饪按钮回归")
+        return False
+
+    def _back_to_city(self, context, ctrl):
+        """左上返回 → 约会城市"""
+        for _ in range(3):
+            _click(ctrl, *self.BACK, 4.0)
+            img = _shot(ctrl)
+            t = _hit(context, img, "约会_城市标题")
+            if t is not None and t.hit:
+                _log("已返回约会城市")
+                return True
+        _log("返回约会城市失败（可能仍停留原页）")
+        return False
 
 
 def wait_hit(context, ctrl, entry, seconds=8):

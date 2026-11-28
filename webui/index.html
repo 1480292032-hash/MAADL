@@ -186,6 +186,32 @@
 </div>
 
 <div class="card">
+  <h2>约会 · 料理烹饪</h2>
+  <div class="desc">
+    自动进约会城市→料理→翻到所选餐厅→选食物→材料「不足」自动跳过→开始烹饪连点→返回城市。
+    <b>次数</b>：1 / 5 / 10（饮品店和豪华餐厅有「烹饪10次」按钮，10 次一次做完）。
+  </div>
+  <div class="slot-row">
+    <div class="label">餐厅</div>
+    <div class="slot-opts" id="opts-cookshop"></div>
+  </div>
+  <div class="slot-row">
+    <div class="label">食物</div>
+    <div class="slot-opts">
+      <select id="cook-food" style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-family:inherit"></select>
+    </div>
+  </div>
+  <div class="slot-row">
+    <div class="label">烹饪次数</div>
+    <div class="slot-opts" id="opts-cooktimes"></div>
+  </div>
+  <div class="actions">
+    <span id="cook-msg" style="font-size:13px;color:var(--ok)"></span>
+    <button class="ghost" style="flex:0 0 auto;margin-left:auto" onclick="saveCooking()">保存</button>
+  </div>
+</div>
+
+<div class="card">
   <h2>竞技场 · 每日战斗场数</h2>
   <div class="desc">
     设置「青铜战场」每日自动匹配的场数。<b>填 0 = 不打竞技场</b>（任务会跳过）。<br>
@@ -258,6 +284,13 @@ async function loadConfig() {
     document.getElementById("kb-exchange").checked = !!data.park.kabbalah_exchange;
     document.getElementById("th-times").value = data.park.theater_times || 1;
     document.getElementById("th-exchange").checked = data.park.theater_exchange !== false;
+    cookMenus = data.park.cook_menus || cookMenus;
+    cookShop = data.park.cook_shop || "面包店";
+    cookTimes = data.park.cook_times || 1;
+    renderCookShop();
+    renderCookFood();
+    renderCookTimes();
+    document.getElementById("cook-food").value = data.park.cook_food || "干面包";
     renderParkMode();
   }
   if (data.daily_order && data.daily_order.length) {
@@ -312,6 +345,85 @@ async function saveKabbalah() {
   });
   const data = await r.json();
   st.textContent = data.ok ? `✓ 已保存：等级 ${data.park.kabbalah_grades.join("/")} · 次数 ${data.park.kabbalah_times} · 兑换 ${data.park.kabbalah_exchange ? "开" : "关"}` : "✗ 保存失败";
+  st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
+  setTimeout(() => st.textContent = "", 4000);
+}
+
+let cookMenus = {
+  "面包店": ["干面包", "牛奶面包", "奶酪蛋挞", "黄油面包", "布丁蛋糕",
+             "黄豆粉面包", "炸薯球", "抹茶蛋糕", "糯米团子", "草莓大福", "红豆年糕汤"],
+  "饮品店": ["清甜果汁", "蔬菜汁", "糯米酒", "水果布丁", "布丁奶昔",
+             "牛奶可可", "薄荷抹茶", "绿色妖姬", "薄荷绿茶"],
+  "豪华餐厅": ["水果寿司", "蔬菜蛋卷", "水果披萨", "果蔬拼盘", "多层汉堡",
+               "百味拉面", "意式热狗", "糯米甜豆腐", "果木烤肉排"]
+};
+let cookShop = "面包店";
+let cookTimes = 1;
+const COOK_TIME_OPTS = [1, 5, 10];
+
+function renderCookShop() {
+  const box = document.getElementById("opts-cookshop");
+  box.innerHTML = "";
+  Object.keys(cookMenus).forEach(s => {
+    const d = document.createElement("div");
+    d.className = "slot-opt" + (s === cookShop ? " on" : "");
+    d.textContent = s;
+    d.style.minWidth = "72px";
+    d.onclick = () => {
+      cookShop = s;
+      renderCookShop();
+      renderCookFood();
+    };
+    box.appendChild(d);
+  });
+}
+
+function renderCookFood() {
+  const sel = document.getElementById("cook-food");
+  sel.innerHTML = "";
+  (cookMenus[cookShop] || []).forEach(f => {
+    const o = document.createElement("option");
+    o.value = f;
+    o.textContent = f;
+    sel.appendChild(o);
+  });
+}
+
+function renderCookTimes() {
+  const box = document.getElementById("opts-cooktimes");
+  box.innerHTML = "";
+  COOK_TIME_OPTS.forEach(n => {
+    const d = document.createElement("div");
+    d.className = "slot-opt" + (n === cookTimes ? " on" : "");
+    d.textContent = n + " 次";
+    d.style.minWidth = "56px";
+    d.onclick = () => { cookTimes = n; renderCookTimes(); };
+    box.appendChild(d);
+  });
+}
+
+async function saveCooking() {
+  const st = document.getElementById("cook-msg");
+  const food = document.getElementById("cook-food").value;
+  const r = await fetch("/api/park", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: parkMode,
+      max_stages: parseInt(document.getElementById("park-max-stages").value, 10) || 3,
+      volume: parseInt(document.getElementById("park-volume").value, 10) || 6,
+      grades: kbGrades,
+      kabbalah_times: parseInt(document.getElementById("kb-times").value, 10) || 3,
+      kabbalah_exchange: document.getElementById("kb-exchange").checked,
+      theater_times: parseInt(document.getElementById("th-times").value, 10) || 1,
+      theater_exchange: document.getElementById("th-exchange").checked,
+      cook_shop: cookShop,
+      cook_food: food,
+      cook_times: cookTimes
+    })
+  });
+  const data = await r.json();
+  st.textContent = data.ok ? `✓ 已保存：${data.park.cook_shop} · ${data.park.cook_food} · ${data.park.cook_times} 次` : "✗ 保存失败";
   st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
   setTimeout(() => st.textContent = "", 4000);
 }

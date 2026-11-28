@@ -35,8 +35,18 @@ ARENA_DEFAULT = {
 DEFAULT_DAILY_ORDER = [
     "签到", "补给站", "邮件", "联络", "社团", "研发中心", "次元入侵",
     "追猎计划", "特训矩阵", "竞技场", "精灵试炼", "世界之眼", "魔女日程",
-    "每日副本", "剧情推图", "夏拉姆符石挑战", "剧场番外",
+    "每日副本", "剧情推图", "夏拉姆符石挑战", "剧场番外", "约会料理",
 ]
+
+# 约会料理菜单（与 agent/park.py DateCooking.FOODS 保持一致）
+COOK_MENUS = {
+    "面包店": ["干面包", "牛奶面包", "奶酪蛋挞", "黄油面包", "布丁蛋糕",
+               "黄豆粉面包", "炸薯球", "抹茶蛋糕", "糯米团子", "草莓大福", "红豆年糕汤"],
+    "饮品店": ["清甜果汁", "蔬菜汁", "糯米酒", "水果布丁", "布丁奶昔",
+               "牛奶可可", "薄荷抹茶", "绿色妖姬", "薄荷绿茶"],
+    "豪华餐厅": ["水果寿司", "蔬菜蛋卷", "水果披萨", "果蔬拼盘", "多层汉堡",
+                 "百味拉面", "意式热狗", "糯米甜豆腐", "果木烤肉排"],
+}
 
 
 def read_park_config():
@@ -54,13 +64,19 @@ def read_park_config():
         cfg["kabbalah_exchange"] = bool(data.get("kabbalah_exchange", False))
         cfg["theater_times"] = max(1, min(5, int(data.get("theater_times", 1))))
         cfg["theater_exchange"] = bool(data.get("theater_exchange", True))
+        shop = data.get("cook_shop", "面包店")
+        cfg["cook_shop"] = shop if shop in COOK_MENUS else "面包店"
+        cfg["cook_food"] = str(data.get("cook_food", "干面包"))
+        cfg["cook_times"] = int(data.get("cook_times", 1))
     except Exception:
         pass
+    cfg["cook_times"] = cfg["cook_times"] if cfg["cook_times"] in (1, 5, 10) else 1
     return cfg
 
 
 def write_park_config(mode, max_stages, volume=6, grades=None, times=3, exchange=False,
-                      theater_times=None, theater_exchange=None):
+                      theater_times=None, theater_exchange=None,
+                      cook_shop=None, cook_food=None, cook_times=None):
     cfg = {"park_mode": mode if mode in ("story", "hard", "hell") else "hard",
            "park_max_stages": max(1, min(30, int(max_stages))),
            "story_volume": max(1, min(22, int(volume)))}
@@ -84,6 +100,18 @@ def write_park_config(mode, max_stages, volume=6, grades=None, times=3, exchange
         existing["theater_times"] = max(1, min(5, int(theater_times)))
     if theater_exchange is not None:
         existing["theater_exchange"] = bool(theater_exchange)
+    if cook_shop is not None and cook_shop in COOK_MENUS:
+        existing["cook_shop"] = cook_shop
+        # 换餐厅时若当前食物不属于新菜单则重置为第一种
+        menu = COOK_MENUS[cook_shop]
+        cur_food = existing.get("cook_food", menu[0])
+        existing["cook_food"] = cur_food if cur_food in menu else menu[0]
+    if cook_food is not None:
+        shop_now = existing.get("cook_shop", "面包店")
+        if cook_food in COOK_MENUS.get(shop_now, []):
+            existing["cook_food"] = cook_food
+    if cook_times is not None and int(cook_times) in (1, 5, 10):
+        existing["cook_times"] = int(cook_times)
     with open(DAILY_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(existing, f, ensure_ascii=False, indent=4)
     return {"mode": cfg["park_mode"], "max_stages": cfg["park_max_stages"],
@@ -92,7 +120,11 @@ def write_park_config(mode, max_stages, volume=6, grades=None, times=3, exchange
             "kabbalah_times": existing.get("kabbalah_times", 3),
             "kabbalah_exchange": existing.get("kabbalah_exchange", False),
             "theater_times": existing.get("theater_times", 1),
-            "theater_exchange": existing.get("theater_exchange", True)}
+            "theater_exchange": existing.get("theater_exchange", True),
+            "cook_shop": existing.get("cook_shop", "面包店"),
+            "cook_food": existing.get("cook_food", "干面包"),
+            "cook_times": existing.get("cook_times", 1),
+            "cook_menus": COOK_MENUS}
 
 
 def read_daily_order():
@@ -198,6 +230,7 @@ class Handler(BaseHTTPRequestHandler):
             cfg["_slot_options"] = [name for _, name in SLOT_OPTIONS]
             cfg["arena"] = read_arena_config()
             cfg["park"] = read_park_config()
+            cfg["park"]["cook_menus"] = COOK_MENUS
             cfg["daily_order"] = read_daily_order()
             self._send(200, json.dumps(cfg, ensure_ascii=False))
         elif path == "/api/log":
@@ -223,7 +256,9 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = write_park_config(body.get("mode", "hard"), body.get("max_stages", 3),
                                         body.get("volume", 6), body.get("grades"),
                                         body.get("kabbalah_times"), body.get("kabbalah_exchange"),
-                                        body.get("theater_times"), body.get("theater_exchange"))
+                                        body.get("theater_times"), body.get("theater_exchange"),
+                                        body.get("cook_shop"), body.get("cook_food"),
+                                        body.get("cook_times"))
                 self._send(200, json.dumps({"ok": True, "park": cfg}, ensure_ascii=False))
             elif path == "/api/daily":
                 order = [s for s in body.get("order", []) if s in DEFAULT_DAILY_ORDER]

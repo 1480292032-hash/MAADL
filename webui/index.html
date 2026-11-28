@@ -166,6 +166,26 @@
 </div>
 
 <div class="card">
+  <h2>剧场 · 番外（雷霆圣堂）</h2>
+  <div class="desc">
+    自动开始战斗→编队出击→自动战斗监控胜负→打完自动兑换贡献奖励(100/200档)。
+    <b>次数</b>：本次运行挑战场数（剩余次数 5/周，周一重置，耗尽自动跳过）。
+  </div>
+  <div class="slot-row">
+    <div class="label">本次挑战场数</div>
+    <div class="slot-opts">
+      <input id="th-times" type="number" min="1" max="5" value="1"
+        style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;font-size:15px;font-family:inherit">
+      <label style="display:flex;align-items:center;gap:6px;font-size:14px">
+        <input id="th-exchange" type="checkbox" checked> 兑换贡献奖励
+      </label>
+      <button class="ghost" style="flex:0 0 auto" onclick="saveTheater()">保存</button>
+    </div>
+  </div>
+  <div class="actions"><span id="th-msg" style="font-size:13px;color:var(--ok)"></span></div>
+</div>
+
+<div class="card">
   <h2>竞技场 · 每日战斗场数</h2>
   <div class="desc">
     设置「青铜战场」每日自动匹配的场数。<b>填 0 = 不打竞技场</b>（任务会跳过）。<br>
@@ -236,6 +256,8 @@ async function loadConfig() {
     renderKbGrades();
     document.getElementById("kb-times").value = data.park.kabbalah_times || 3;
     document.getElementById("kb-exchange").checked = !!data.park.kabbalah_exchange;
+    document.getElementById("th-times").value = data.park.theater_times || 1;
+    document.getElementById("th-exchange").checked = data.park.theater_exchange !== false;
     renderParkMode();
   }
   if (data.daily_order && data.daily_order.length) {
@@ -290,6 +312,34 @@ async function saveKabbalah() {
   });
   const data = await r.json();
   st.textContent = data.ok ? `✓ 已保存：等级 ${data.park.kabbalah_grades.join("/")} · 次数 ${data.park.kabbalah_times} · 兑换 ${data.park.kabbalah_exchange ? "开" : "关"}` : "✗ 保存失败";
+  st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
+  setTimeout(() => st.textContent = "", 4000);
+}
+
+async function saveTheater() {
+  const times = parseInt(document.getElementById("th-times").value, 10);
+  const st = document.getElementById("th-msg");
+  if (isNaN(times) || times < 1 || times > 5) {
+    st.textContent = "✗ 次数请填 1~5（每周 5 次）";
+    st.style.color = "#ff6b6b";
+    return;
+  }
+  const r = await fetch("/api/park", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: parkMode,
+      max_stages: parseInt(document.getElementById("park-max-stages").value, 10) || 3,
+      volume: parseInt(document.getElementById("park-volume").value, 10) || 6,
+      grades: kbGrades,
+      kabbalah_times: parseInt(document.getElementById("kb-times").value, 10) || 3,
+      kabbalah_exchange: document.getElementById("kb-exchange").checked,
+      theater_times: times,
+      theater_exchange: document.getElementById("th-exchange").checked
+    })
+  });
+  const data = await r.json();
+  st.textContent = data.ok ? `✓ 已保存：场数 ${data.park.theater_times} · 兑换 ${data.park.theater_exchange ? "开" : "关"}` : "✗ 保存失败";
   st.style.color = data.ok ? "var(--ok)" : "#ff6b6b";
   setTimeout(() => st.textContent = "", 4000);
 }

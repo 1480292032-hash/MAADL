@@ -821,6 +821,7 @@ DAILY_STEPS = {
     "魔女日程": "子流程_魔女日程",
     "每日副本": "子流程_每日副本",
     "夏拉姆符石挑战": "子流程_夏拉姆",
+    "剧场番外": "子流程_剧场番外",
     "剧情推图": "剧情推图循环",
 }
 
@@ -855,6 +856,8 @@ def load_daily_config():
         cfg["kabbalah_grades"] = valid or ["D"]
         cfg["kabbalah_times"] = max(1, min(9, int(data.get("kabbalah_times", 3))))
         cfg["kabbalah_exchange"] = bool(data.get("kabbalah_exchange", False))
+        cfg["theater_times"] = max(1, min(5, int(data.get("theater_times", 1))))
+        cfg["theater_exchange"] = bool(data.get("theater_exchange", True))
         cfg["stage_name"] = str(data.get("stage_name", cfg["stage_name"]))
         cfg["level"] = str(data.get("level", cfg["level"]))
         cfg["times"] = max(1, min(9, int(data.get("times", 1))))
@@ -2381,6 +2384,277 @@ class KabbalahTrial(CustomAction):
             if c is not None and c.hit:
                 _click_hold(ctrl, 895, 515, 600, 2.5)
         _log("已退出夏拉姆之门")
+
+
+@AgentServer.custom_action("剧场番外挑战")
+class TheaterExtra(CustomAction):
+    """剧场·番外（万由里裁决·雷霆圣堂）全流程 agent（2026-11-28 实机校准）。
+
+    作战中心→剧场页签(长按)→底部头像条选中「万由里裁决」(信息卡出现
+    雷霆圣堂LV3 即选中)→蓝色「挑战」按钮(1135,455)→BOSS页(雷霆圣堂LV3)
+    →开始战斗(长按)→挑战次数弹窗(默认选1,确定)→编队页(作战·准备)
+    →出击(MaaFW点击——该按钮 adb input 长按无效,实测仅 MaaFW 通道生效)
+    →自动战斗(每10s查胜负,限时3分钟,BOSS战满贡献+100)
+    →结算点屏幕继续→回BOSS页(剩余次数-1)→循环至配置次数
+    →贡献兑换(左下角粉圆图标→兑换奖励弹窗→100/200档逐档兑换)
+    →家园键(1245,45)回主界面。
+
+    坑：剧场页底部头像条会随选中项重排；「前往」按钮进的是番外剧情
+    章节列表（卷一记忆碎片），不是 BOSS 页——BOSS 页必须走「挑战」按钮。
+
+    机制：剩余次数 5/周（周日 22:00 结算、周一重置）；每场按伤害换算
+    个人贡献（实测满贡献 +100/场）；贡献档位 100/200/400 各档每周各领一次。
+    """
+
+    # 兑换奖励弹窗：档位「兑换」按钮（100 档/200 档行，实测 2026-11-28）
+    EXCHANGE_BTNS = [(975, 250), (975, 378)]
+    EXCHANGE_CLOSE_X = (1020, 155)
+    CONTRIB_ICON = (79, 673)     # 番外页左下角个人贡献旁粉圆图标
+    HOME_KEY = (1245, 45)        # 右上角家园键
+    AVATAR_SLOTS = [(172, 675), (283, 675), (394, 675), (505, 675)]
+    # 剧场页底部头像条候选槽位（条随选中项重排，逐个试 + 信息卡 OCR 验证）
+    BATTLE_TIMEOUT = 330         # 自动战斗监控上限（BOSS 限时 3 分钟 + 结算余量）
+    WATCH_INTERVAL = 10          # 用户要求：每隔 10 秒左右检测胜负
+
+    def run(self, context, argv) -> bool:
+        cfg = load_daily_config()
+        times = cfg.get("theater_times", 1)
+        exchange_on = cfg.get("theater_exchange", True)
+        _log(f"剧场番外挑战：次数 {times} · 贡献兑换 {'开' if exchange_on else '关'}")
+
+        ctrl = context.tasker.controller
+        if ctrl is None:
+            return False
+
+        # 1. 导航到番外页
+        if not self._enter_extra_page(context, ctrl):
+            _log("未进入剧场番外页，结束")
+            return True
+
+        # 2. 读剩余次数（仅日志参考，实际以弹窗是否弹出为准）
+        left = self._read_remaining(context, ctrl)
+        if left is not None:
+            _log(f"当前剩余挑战次数：{left}")
+            if left <= 0:
+                _log("剩余次数为 0，跳过战斗")
+            else:
+                times = min(times, left)
+
+        # 3. 按次数循环挑战
+        wins = 0
+        for i in range(times):
+            got = self._one_battle(context, ctrl, i + 1)
+            if got < 0:
+                break   # 弹窗未弹出=无剩余次数或界面异常，停止
+            wins += got
+
+        # 4. 贡献兑换
+        if exchange_on:
+            self._exchange_contrib(context, ctrl)
+
+        # 5. 家园键回主界面
+        _click(ctrl, *self.HOME_KEY, 3.0)
+        _ensure_main_screen(context, ctrl)
+        _log(f"剧场番外挑战结束（胜 {wins} 场）")
+        return True
+
+    # ---- 导航 ----
+
+    def _enter_extra_page(self, context, ctrl):
+        """主界面 → 作战中心 → 剧场页签 → 前往 → 番外页"""
+        img = _shot(ctrl)
+        if img is not None:
+            if _hit(context, img, "剧场_番外页特征") is not None and \
+                    _hit(context, img, "剧场_番外页特征").hit:
+                _log("已在剧场番外页")
+                return True
+
+        if not _ensure_main_screen(context, ctrl):
+            return False
+        # 进作战中心：pipeline Click 在 3.7.4 会被吞，点击后必须校验，
+        # 未进入则用长按「作战」按钮补刀（实测瞬时点击无效、长按生效）
+        in_center = False
+        try:
+            context.run_action("剧情_从主界面进入")
+            time.sleep(2)
+        except Exception as e:
+            _log(f"进作战中心异常: {e}")
+        for _ in range(3):
+            img = _shot(ctrl)
+            t = _hit(context, img, "作战中心标题")
+            if t is not None and t.hit:
+                in_center = True
+                break
+            _click_hold(ctrl, 1145, 430, 600, 4.0)
+        if not in_center:
+            _log("未进入作战中心")
+            return False
+
+        # 剧场页签（长按，瞬时点击会被吞）
+        ok = False
+        for _ in range(3):
+            _click_hold(ctrl, 60, 450, 600, 3.0)
+            img = _shot(ctrl)
+            t = _hit(context, img, "剧场_页签选中")
+            if t is not None and t.hit:
+                ok = True
+                break
+        if not ok:
+            _log("3 次尝试未进入剧场页签")
+            return False
+        _log("已进入剧场页")
+
+        # 底部头像条选中「万由里裁决」活动（判定：右上信息卡显示雷霆圣堂LV3
+        # 或蓝色「挑战」按钮）。头像条会随选中项重排（选中槽放大），固定候选
+        # 坐标逐个点击、点一个查一个；别的活动（如支流者·再装填）信息卡是
+        # 「前往」按钮→番外剧情章节，只有万由里裁决有「挑战」按钮→BOSS 页。
+        def _mio_selected():
+            img = _shot(ctrl)
+            if img is None:
+                return False
+            t = _hit(context, img, "剧场_雷霆圣堂卡")
+            if t is not None and t.hit:
+                return True
+            c = _hit(context, img, "剧场_挑战按钮")
+            return c is not None and c.hit
+
+        selected = _mio_selected()
+        if not selected:
+            for sx, sy in self.AVATAR_SLOTS:
+                _click(ctrl, sx, sy, 3.5)
+                if _mio_selected():
+                    selected = True
+                    break
+        if not selected:
+            _log("未选中万由里裁决活动（信息卡无雷霆圣堂/挑战按钮）")
+            return False
+        _log("已选中万由里裁决活动")
+
+        # 蓝色「挑战」按钮 → 雷霆圣堂 BOSS 页
+        for _ in range(3):
+            img = _shot(ctrl)
+            d = _hit(context, img, "剧场_挑战按钮")
+            if d is not None and d.hit:
+                cx, cy = _box_center(d)
+                _click_hold(ctrl, cx, cy, 600, 4.0)
+                for _ in range(5):
+                    img = _shot(ctrl)
+                    f = _hit(context, img, "剧场_番外页特征")
+                    if f is not None and f.hit:
+                        _log("已进入雷霆圣堂 BOSS 页")
+                        return True
+                    time.sleep(2)
+            else:
+                _click_hold(ctrl, 1135, 455, 600, 4.0)   # 兜底坐标（实测）
+        _log("未进入雷霆圣堂 BOSS 页")
+        return False
+
+    def _read_remaining(self, context, ctrl):
+        """OCR 右下「剩余次数 N」"""
+        img = _shot(ctrl)
+        if img is None:
+            return None
+        d = _hit(context, img, "剧场_剩余次数框")
+        if d is None or not d.hit:
+            return None
+        m = re.search(r"(\d+)", _dtext(d))
+        return int(m.group(1)) if m else None
+
+    # ---- 单场战斗 ----
+
+    def _one_battle(self, context, ctrl, idx):
+        """打一场 BOSS 战。返回 1=胜利 0=失败/超时 -1=无法开打（次数耗尽等）"""
+        # 开始战斗（长按）
+        started = False
+        for _ in range(3):
+            img = _shot(ctrl)
+            d = _hit(context, img, "剧场_开始战斗按钮")
+            if d is not None and d.hit:
+                cx, cy = _box_center(d)
+            else:
+                cx, cy = 1235, 655   # 兜底坐标（实测）
+            _click_hold(ctrl, cx, cy, 600, 2.5)
+            c = wait_hit(context, ctrl, "剧场_次数弹窗确定", 8)
+            if c is not None:
+                started = True
+                break
+            _log(f"第 {idx} 场：开始战斗后未见次数弹窗（可能次数已耗尽）")
+        if not started:
+            return -1
+
+        # 挑战次数弹窗：默认已选 1，点确定
+        cx, cy = _box_center(c)
+        _click_hold(ctrl, cx, cy, 600, 4.0)
+
+        # 等编队页
+        prep = wait_hit(context, ctrl, "剧场_编队页标题", 15)
+        if prep is None:
+            _log("未进入编队页（作战·准备）")
+            return -1
+        time.sleep(1.5)
+
+        # 出击（实测：MaaFW controller 点击有效；adb input 长按无效）
+        img = _shot(ctrl)
+        d = _hit(context, img, "剧场_出击按钮")
+        if d is not None and d.hit:
+            ax, ay = _box_center(d)
+        else:
+            ax, ay = 1211, 676
+        _click(ctrl, ax, ay, 5.0)
+        _log(f"第 {idx} 场：已出击，进入自动战斗（每 {self.WATCH_INTERVAL}s 检测胜负）")
+
+        # 自动战斗监控（游戏自带自动战斗，无需轮点技能）
+        result = None
+        t0 = time.time()
+        while time.time() - t0 < self.BATTLE_TIMEOUT:
+            time.sleep(self.WATCH_INTERVAL)
+            img = _shot(ctrl)
+            if img is None:
+                continue
+            if _hit(context, img, "剧场_战斗胜利") is not None and \
+                    _hit(context, img, "剧场_战斗胜利").hit:
+                result = 1
+                break
+            if _hit(context, img, "剧场_战斗失败") is not None and \
+                    _hit(context, img, "剧场_战斗失败").hit:
+                result = 0
+                break
+        if result is None:
+            _log("战斗监控超时（330s），按失败处理")
+            result = 0
+        _log(f"第 {idx} 场：{'胜利' if result else '失败'}")
+
+        # 结算：点屏幕继续直到回番外页
+        for _ in range(8):
+            img = _shot(ctrl)
+            f = _hit(context, img, "剧场_番外页特征")
+            if f is not None and f.hit:
+                _log("已返回番外页")
+                return result
+            _click(ctrl, 640, 400, 2.5)
+        _log("结算后未返回番外页")
+        return result
+
+    # ---- 贡献兑换 ----
+
+    def _exchange_contrib(self, context, ctrl):
+        """左下角粉圆图标 → 兑换奖励弹窗 → 逐档兑换 → 关闭"""
+        _click(ctrl, *self.CONTRIB_ICON, 3.0)
+        p = wait_hit(context, ctrl, "剧场_兑换奖励弹窗", 6)
+        if p is None:
+            _log("贡献兑换弹窗未打开（图标点击被吞？）")
+            return
+        for bx, by in self.EXCHANGE_BTNS:
+            _click(ctrl, bx, by, 2.5)
+            img = _shot(ctrl)
+            if img is not None and _hit(context, img, "剧场_获得物品") is not None \
+                    and _hit(context, img, "剧场_获得物品").hit:
+                _log(f"兑换成功（档位按钮 {bx},{by}）")
+                _click(ctrl, 640, 560, 2.5)   # 关获得物品弹窗
+            else:
+                _log(f"档位 {bx},{by} 不可兑（已兑换/未达成）")
+        _click(ctrl, *self.EXCHANGE_CLOSE_X, 3.0)
+        _log("贡献兑换完成")
 
 
 def wait_hit(context, ctrl, entry, seconds=8):

@@ -35,7 +35,7 @@ ARENA_DEFAULT = {
 DEFAULT_DAILY_ORDER = [
     "签到", "补给站", "邮件", "联络", "社团", "研发中心", "次元入侵",
     "追猎计划", "特训矩阵", "竞技场", "精灵试炼", "世界之眼", "魔女日程",
-    "每日副本", "剧情推图", "夏拉姆符石挑战",
+    "每日副本", "剧情推图", "夏拉姆符石挑战", "剧场番外",
 ]
 
 
@@ -52,12 +52,15 @@ def read_park_config():
         cfg["kabbalah_grades"] = valid or ["D"]
         cfg["kabbalah_times"] = max(1, min(9, int(data.get("kabbalah_times", 3))))
         cfg["kabbalah_exchange"] = bool(data.get("kabbalah_exchange", False))
+        cfg["theater_times"] = max(1, min(5, int(data.get("theater_times", 1))))
+        cfg["theater_exchange"] = bool(data.get("theater_exchange", True))
     except Exception:
         pass
     return cfg
 
 
-def write_park_config(mode, max_stages, volume=6, grades=None, times=3, exchange=False):
+def write_park_config(mode, max_stages, volume=6, grades=None, times=3, exchange=False,
+                      theater_times=None, theater_exchange=None):
     cfg = {"park_mode": mode if mode in ("story", "hard", "hell") else "hard",
            "park_max_stages": max(1, min(30, int(max_stages))),
            "story_volume": max(1, min(22, int(volume)))}
@@ -77,13 +80,19 @@ def write_park_config(mode, max_stages, volume=6, grades=None, times=3, exchange
         existing["kabbalah_times"] = max(1, min(9, int(times)))
     if exchange is not None:
         existing["kabbalah_exchange"] = bool(exchange)
+    if theater_times is not None:
+        existing["theater_times"] = max(1, min(5, int(theater_times)))
+    if theater_exchange is not None:
+        existing["theater_exchange"] = bool(theater_exchange)
     with open(DAILY_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(existing, f, ensure_ascii=False, indent=4)
     return {"mode": cfg["park_mode"], "max_stages": cfg["park_max_stages"],
             "volume": cfg["story_volume"],
             "kabbalah_grades": existing.get("kabbalah_grades", ["D"]),
             "kabbalah_times": existing.get("kabbalah_times", 3),
-            "kabbalah_exchange": existing.get("kabbalah_exchange", False)}
+            "kabbalah_exchange": existing.get("kabbalah_exchange", False),
+            "theater_times": existing.get("theater_times", 1),
+            "theater_exchange": existing.get("theater_exchange", True)}
 
 
 def read_daily_order():
@@ -213,7 +222,8 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/park":
                 cfg = write_park_config(body.get("mode", "hard"), body.get("max_stages", 3),
                                         body.get("volume", 6), body.get("grades"),
-                                        body.get("kabbalah_times"), body.get("kabbalah_exchange"))
+                                        body.get("kabbalah_times"), body.get("kabbalah_exchange"),
+                                        body.get("theater_times"), body.get("theater_exchange"))
                 self._send(200, json.dumps({"ok": True, "park": cfg}, ensure_ascii=False))
             elif path == "/api/daily":
                 order = [s for s in body.get("order", []) if s in DEFAULT_DAILY_ORDER]
